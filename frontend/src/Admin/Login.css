@@ -1,0 +1,120 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+body {
+  background-color: #f9f9fb;
+  height: 100vh;
+}
+
+/* Full page background */
+.login-page {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+/* Centered login box */
+.login-box {
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 40px 50px;
+  border-radius: 10px;
+  width: 350px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  backdrop-filter: blur(4px);
+}
+
+/* Header inside login card */
+.login-header {
+  margin-bottom: 20px;
+}
+
+.login-logo {
+  width: 45px;
+  height: 45px;
+  margin-bottom: 10px;
+}
+
+.login-header h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #222;
+}
+
+.login-header p {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+/* Input fields */
+.login-form input {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.login-form input:focus {
+  border-color: #f58220;
+  box-shadow: 0 0 4px rgba(245, 130, 32, 0.4);
+}
+
+/* Form options */
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  margin-top: 8px;
+  margin-bottom: 18px;
+}
+
+.forgot-link {
+  color: #f58220;
+  text-decoration: none;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+/* Button */
+.login-btn {
+  width: 100%;
+  padding: 12px;
+  background-color: #f58220;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.login-btn:hover {
+  background-color: #e36c00;
+}
+
+/* Footer */
+.footer {
+  position: absolute;
+  bottom: 10px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  font-size: 0.85rem;
+}

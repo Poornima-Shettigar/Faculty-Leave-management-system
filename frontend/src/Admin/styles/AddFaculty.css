@@ -1,0 +1,89 @@
+.adduser-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 30px;
+}
+
+.adduser-card {
+  width: 650px;
+  background: #ffffff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.adduser-card h2 {
+  margin-bottom: 20px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a237e;
+  text-align: center;
+}
+
+/* ---- Form Layout ---- */
+
+.adduser-form {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+  font-size: 14px;
+}
+
+.adduser-form input,
+.adduser-form select {
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid #c5c5c5;
+  outline: none;
+  transition: 0.2s;
+}
+
+.adduser-form input:focus,
+.adduser-form select:focus {
+  border-color: #1a73e8;
+  box-shadow: 0 0 4px rgba(26,115,232,0.4);
+}
+
+/* ---- Button ---- */
+
+.adduser-btn {
+  margin-top: 10px;
+  padding: 12px;
+  width: 100%;
+  font-size: 16px;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s;
+}
+
+.adduser-btn:hover {
+  background: #0c57c8;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.error-text {
+  color: #d32f2f;
+  font-size: 13px;
+  margin-top: 4px;
+}
