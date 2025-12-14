@@ -89,6 +89,9 @@ exports.applyLeaveRequest = async (req, res) => {
 
     const totalDays = end.diff(start, "days") + 1;
 
+    // Check if it's emergency leave (description contains "emergency")
+    const isEmergencyLeave = description.toLowerCase().includes("emergency");
+
     // Check leave balance
     const employeeLeave = await EmployeeLeave.findOne({
       employeeId,
@@ -117,23 +120,56 @@ exports.applyLeaveRequest = async (req, res) => {
     // If HOD, send directly to director
     const status = user.role === "hod" ? "pending_director" : "pending_hod";
 
-    // Get periods if user is teaching staff
+    // Get periods if user is teaching staff or HOD (HODs can also be teaching)
+    // For emergency leave, period adjustments are optional
     let periods = [];
-    if (user.role === "teaching" && (!periodAdjustments || periodAdjustments.length === 0)) {
+    if ((user.role === "teaching" || user.role === "hod") && (!periodAdjustments || periodAdjustments.length === 0)) {
       periods = await getPeriodsForDateRange(employeeId, startDate, endDate);
     } else if (periodAdjustments && periodAdjustments.length > 0) {
       periods = periodAdjustments;
     }
 
+    // Validate substitute faculty availability if period adjustments are provided
+    if (periods && periods.length > 0) {
+      for (const period of periods) {
+        if (period.substituteFacultyId) {
+          // Check if substitute has approved leave on this date
+          const substituteLeave = await LeaveRequest.findOne({
+            employeeId: period.substituteFacultyId,
+            status: "approved",
+            startDate: { $lte: moment(period.date).toDate() },
+            endDate: { $gte: moment(period.date).toDate() }
+          });
+
+          if (substituteLeave) {
+            const substitute = await User.findById(period.substituteFacultyId);
+            return res.status(400).json({
+              message: `Substitute faculty ${substitute?.name || "Selected"} is on leave on ${moment(period.date).format("MMM D, YYYY")}. Please select another substitute.`
+            });
+          }
+        }
+      }
+    }
+
     // Convert date strings to Date objects for period adjustments
-    const formattedPeriodAdjustments = periods.map(period => ({
-      ...period,
-      date: moment(period.date).toDate(), // Convert string to Date
-      departmentId: period.departmentId,
-      subjectId: period.subjectId,
-      substituteFacultyId: period.substituteFacultyId || null,
-      status: period.substituteFacultyId ? "adjusted" : "pending"
-    }));
+    // For emergency leave, allow periods without substitutes (status: "not_required")
+    const formattedPeriodAdjustments = periods.map(period => {
+      let status = "pending";
+      if (period.substituteFacultyId) {
+        status = "adjusted";
+      } else if (isEmergencyLeave) {
+        status = "not_required";
+      }
+      
+      return {
+        ...period,
+        date: moment(period.date).toDate(), // Convert string to Date
+        departmentId: period.departmentId,
+        subjectId: period.subjectId,
+        substituteFacultyId: period.substituteFacultyId || null,
+        status
+      };
+    });
 
     // Create leave request
     const leaveRequest = new LeaveRequest({
@@ -232,15 +268,38 @@ exports.getPeriodsForDateRange = async (req, res) => {
 
     // Get available substitute faculties
     const user = await User.findById(employeeId).populate("departmentType");
-    const substitutes = await User.find({
+    const allSubstitutes = await User.find({
       departmentType: user.departmentType._id,
-      role: "teaching",
+      role: { $in: ["teaching", "hod"] }, // Include HOD as they can also substitute
       _id: { $ne: employeeId }
     }).select("name email");
 
+    // Filter out substitutes who are on leave during the requested period
+    const availableSubstitutes = [];
+    const start = moment(startDate);
+    const end = moment(endDate);
+
+    for (const substitute of allSubstitutes) {
+      // Check if substitute has approved leave during this period
+      const conflictingLeaves = await LeaveRequest.find({
+        employeeId: substitute._id,
+        status: "approved",
+        $or: [
+          {
+            startDate: { $lte: end.toDate() },
+            endDate: { $gte: start.toDate() }
+          }
+        ]
+      });
+
+      if (conflictingLeaves.length === 0) {
+        availableSubstitutes.push(substitute);
+      }
+    }
+
     res.json({
       periods,
-      availableSubstitutes: substitutes
+      availableSubstitutes
     });
 
   } catch (error) {
@@ -551,6 +610,70 @@ exports.getDirectorPendingRequests = async (req, res) => {
 
   } catch (error) {
     console.error("Error fetching Director pending requests:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// =============================
+//  HOD UPDATE PERIOD ADJUSTMENTS FOR FACULTY LEAVE REQUEST
+// =============================
+exports.hodUpdatePeriodAdjustments = async (req, res) => {
+  try {
+    const { leaveRequestId } = req.params;
+    const { periodAdjustments, hodId } = req.body;
+
+    const hod = await User.findById(hodId);
+    if (!hod || hod.role !== "hod") {
+      return res.status(403).json({ message: "Unauthorized. Only HOD can update period adjustments" });
+    }
+
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId)
+      .populate("employeeId", "name email role departmentType");
+
+    if (!leaveRequest) {
+      return res.status(404).json({ message: "Leave request not found" });
+    }
+
+    // Verify HOD is from the same department
+    if (leaveRequest.employeeId.departmentType.toString() !== hod.departmentType.toString()) {
+      return res.status(403).json({ message: "Unauthorized. You can only update period adjustments for your department faculty" });
+    }
+
+    // Validate substitute faculty availability
+    for (const adjustment of periodAdjustments) {
+      if (adjustment.substituteFacultyId) {
+        const substituteLeave = await LeaveRequest.findOne({
+          employeeId: adjustment.substituteFacultyId,
+          status: "approved",
+          startDate: { $lte: moment(adjustment.date).toDate() },
+          endDate: { $gte: moment(adjustment.date).toDate() }
+        });
+
+        if (substituteLeave) {
+          const substitute = await User.findById(adjustment.substituteFacultyId);
+          return res.status(400).json({
+            message: `Substitute faculty ${substitute?.name || "Selected"} is on leave on ${moment(adjustment.date).format("MMM D, YYYY")}. Please select another substitute.`
+          });
+        }
+      }
+    }
+
+    // Update period adjustments
+    leaveRequest.periodAdjustments = periodAdjustments.map(adj => ({
+      ...adj,
+      date: moment(adj.date).toDate(),
+      status: adj.substituteFacultyId ? "adjusted" : "pending"
+    }));
+
+    await leaveRequest.save();
+
+    res.json({
+      message: "Period adjustments updated successfully",
+      leaveRequest
+    });
+
+  } catch (error) {
+    console.error("Error updating period adjustments:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

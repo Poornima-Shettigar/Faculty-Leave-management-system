@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import AdjustPeriodsModal from "./AdjustPeriodsModal";
 
 function ApproveLeave() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
@@ -10,6 +11,7 @@ function ApproveLeave() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [comments, setComments] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [adjustPeriodsRequest, setAdjustPeriodsRequest] = useState(null);
 
   useEffect(() => {
     loadPendingRequests();
@@ -185,6 +187,14 @@ function ApproveLeave() {
               )}
 
               <div className="flex gap-4">
+                {request.periodAdjustments && request.periodAdjustments.length > 0 && (
+                  <button
+                    onClick={() => setAdjustPeriodsRequest(request)}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                  >
+                    Adjust Periods
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedRequest(request)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -237,6 +247,17 @@ function ApproveLeave() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Adjust Periods Modal */}
+      {adjustPeriodsRequest && (
+        <AdjustPeriodsModal
+          leaveRequest={adjustPeriodsRequest}
+          onClose={() => setAdjustPeriodsRequest(null)}
+          onSuccess={() => {
+            loadPendingRequests();
+          }}
+        />
       )}
     </div>
   );

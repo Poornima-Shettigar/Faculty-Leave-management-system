@@ -9,7 +9,7 @@ function DashboardHome() {
   const [stats, setStats] = useState({});
   const [leaveBalance, setLeaveBalance] = useState([]);
 
-  /* ----------- LOAD BASIC COUNTS (Runs Once) ----------- */
+  /* ----------- LOAD BASIC COUNTS ----------- */
   useEffect(() => {
     loadDepartmentCount();
     loadFacultyCount();
@@ -18,7 +18,10 @@ function DashboardHome() {
   /* ----------- ROLE BASED STATS ----------- */
   useEffect(() => {
     if (role === "admin") loadAdminStats();
-    if (role === "hod") loadHodStats();
+    if (role === "hod") {
+      loadHodStats();
+      loadFacultyLeaveBalance(); // Also load leave balance for HOD
+    }
     if (role === "teaching" || role === "non-teaching") loadFacultyLeaveBalance();
     if (role === "director") loadDirectorStats();
   }, [role]);
@@ -41,7 +44,9 @@ function DashboardHome() {
   };
 
   const loadHodStats = async () => {
-    const res = await axios.get(`http://localhost:5000/api/hod/stats/${user.department}`);
+    const res = await axios.get(
+      `http://localhost:5000/api/hod/stats/${user.department}`
+    );
     setStats((prev) => ({ ...prev, ...res.data }));
   };
 
@@ -63,63 +68,96 @@ function DashboardHome() {
     setStats((prev) => ({ ...prev, ...res.data }));
   };
 
-  /* ----------- COMPONENTS ----------- */
+  /* ----------- UI COMPONENTS ----------- */
 
+  const StatCard = ({ title, value }) => (
+    <div className="bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-2xl shadow-lg p-6 hover:scale-[1.02] transition">
+      <p className="text-sm opacity-90">{title}</p>
+      <p className="text-4xl font-bold mt-2">{value || 0}</p>
+    </div>
+  );
+
+  /* ----------- FACULTY DASHBOARD ----------- */
   const FacultyDashboard = () => (
-    <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-100">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">
+    <div>
+      <h2 className="text-xl font-semibold text-gray-800 mb-6">
         Leave Balance – Current Academic Year
       </h2>
 
       {leaveBalance.length === 0 ? (
-        <p className="text-gray-500 text-sm">No leave data found.</p>
+        <p className="text-gray-500">No leave data found.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-blue-600 text-white">
-              <tr>
-                <th className="px-4 py-3 text-left">Leave Type</th>
-                <th className="px-4 py-3 text-left">Allowed</th>
-                <th className="px-4 py-3 text-left">Carry Forward</th>
-                <th className="px-4 py-3 text-left">Used</th>
-                <th className="px-4 py-3 text-left">Total</th>
-                <th className="px-4 py-3 text-left">Remaining</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white">
-              {leaveBalance.map((leave) => (
-                <tr
-                  key={leave.leaveTypeId}
-                  className="border-b hover:bg-gray-50 transition"
-                >
-                  <td className="px-4 py-3">{leave.leaveTypeName}</td>
-                  <td className="px-4 py-3">{leave.allowedLeaves}</td>
-                  <td className="px-4 py-3">{leave.carryForwardLeaves}</td>
-                  <td className="px-4 py-3">{leave.usedLeaves}</td>
-                  <td className="px-4 py-3">{leave.totalAvailable}</td>
-                  <td className="px-4 py-3 font-semibold text-green-600">
-                    {leave.remainingLeaves}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {leaveBalance.map((leave) => {
+            const percentage =
+              (leave.remainingLeaves / leave.totalAvailable) * 100;
+
+            const barColor =
+              percentage > 60
+                ? "bg-green-500"
+                : percentage > 30
+                ? "bg-yellow-400"
+                : "bg-red-500";
+
+            return (
+              <div
+                key={leave.leaveTypeId}
+                className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 hover:shadow-xl transition"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {leave.leaveTypeName}
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    {leave.remainingLeaves}/{leave.totalAvailable}
+                  </span>
+                </div>
+
+                {/* Progress */}
+                <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                  <div
+                    className={`${barColor} h-2 rounded-full`}
+                    style={{ width: `${percentage}%` }}
+                  ></div>
+                </div>
+
+                {/* Details */}
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-gray-500">Allowed</p>
+                    <p className="font-semibold">{leave.allowedLeaves}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Carry Forward</p>
+                    <p className="font-semibold">{leave.carryForwardLeaves}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Used</p>
+                    <p className="font-semibold text-red-600">
+                      {leave.usedLeaves}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Remaining</p>
+                    <p className="font-semibold text-green-600">
+                      {leave.remainingLeaves}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 
-  const StatCard = ({ title, value }) => (
-    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 hover:shadow-lg transition">
-      <h3 className="text-gray-600 text-sm">{title}</h3>
-      <p className="text-3xl font-bold text-blue-600 mt-2">{value}</p>
-    </div>
-  );
+  /* ----------- ROLE DASHBOARDS ----------- */
 
   const AdminDashboard = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <StatCard title="Total Faculties" value={stats.totalFaculties || 0} />
-      <StatCard title="Total Departments" value={stats.totalDept || 0} />
+      <StatCard title="Total Faculties" value={stats.totalFaculties} />
+      <StatCard title="Total Departments" value={stats.totalDept} />
     </div>
   );
 
@@ -131,7 +169,7 @@ function DashboardHome() {
       <StatCard title="Rejected Leaves" value={stats.rejected} />
 
       <div
-        className="col-span-full bg-blue-600 rounded-xl text-white text-center py-4 cursor-pointer hover:bg-blue-700 transition"
+        className="col-span-full bg-blue-600 text-white text-center py-4 rounded-xl cursor-pointer hover:bg-blue-700 transition"
         onClick={() => (window.location.href = "/hod/dashboard/approve-leave")}
       >
         Review Leave Requests →
@@ -147,7 +185,7 @@ function DashboardHome() {
       <StatCard title="Approved Leaves" value={stats.approved} />
 
       <div
-        className="col-span-full bg-blue-600 rounded-xl text-white text-center py-4 cursor-pointer hover:bg-blue-700 transition"
+        className="col-span-full bg-blue-600 text-white text-center py-4 rounded-xl cursor-pointer hover:bg-blue-700 transition"
         onClick={() => (window.location.href = "/director/dashboard/analytics")}
       >
         View Analytics →
@@ -155,16 +193,21 @@ function DashboardHome() {
     </div>
   );
 
+  /* ----------- MAIN RENDER ----------- */
   return (
     <div className="p-8 w-full">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">
         Welcome, {user.name || user.email}
       </h1>
 
-      {role === "admin" && <AdminDashboard />}
-      {role === "hod" && <HodDashboard />}
-      {(role === "teaching" || role === "non-teaching") && <FacultyDashboard />}
-      {role === "director" && <DirectorDashboard />}
+      <div className="bg-gray-50 rounded-xl p-6">
+        {role === "admin" && <AdminDashboard />}
+        {role === "hod" && <HodDashboard />}
+        {(role === "teaching" || role === "non-teaching") && (
+          <FacultyDashboard />
+        )}
+        {role === "director" && <DirectorDashboard />}
+      </div>
     </div>
   );
 }

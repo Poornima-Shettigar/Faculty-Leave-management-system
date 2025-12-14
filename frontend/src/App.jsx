@@ -48,7 +48,9 @@ import MyTimetable from "./Faculty/MyTimetable.jsx";
 import HodApproveLeave from "./HOD/ApproveLeave.jsx";
 import ViewDepartmentLeaves from "./HOD/ViewDepartmentLeaves.jsx";
 import DirectorApproveLeave from "./Director/ApproveLeave.jsx";
+import FacultyDashboard from "./Faculty/FacultyDashboard.jsx"
 import ViewApprovedLeaves from "./Director/ViewApprovedLeaves.jsx";
+import ApplyLeaveHod from "./HOD/ApplyLeaveHod.jsx"
 import {
  
  
@@ -121,7 +123,7 @@ function App() {
             <Route path="view-timetable" element={<ViewTimetableFaculty />} />
             <Route path="view-subject" element={<ViewSubjectsForFaculty />} />
             
-            <Route path="apply-leave" element={<ViewApprovedLeaves />} />
+            <Route path="apply-leave" element={<ApplyLeave />} />
             <Route path="my-leave-status" element={<MyLeaveStatus />} />
             
           </Route>
@@ -156,11 +158,12 @@ function App() {
             <Route path="faculty-list" element={<FacultyList />} />
             <Route path="approve-leave" element={<HodApproveLeave />} />
             <Route path="view-department-leaves" element={<ViewDepartmentLeaves />} />
-            <Route path="apply-leave" element={<ApplyLeave />} />
+            <Route path="apply-leave-hod" element={<ApplyLeaveHod />} />
             <Route path="dept-reports" element={<DeptReports />} />
              <Route path="timetable-add" element={<AddTimetable />} />
             <Route path="timetable-view" element={<ViewTimetable />} />
-          
+                      <Route path="my-leave-status" element={<MyLeaveStatus />} />
+
             <Route path="add-sub" element={<AddSubject />} />
             
             <Route path="delete-sub" element={<ViewSubjects />} />

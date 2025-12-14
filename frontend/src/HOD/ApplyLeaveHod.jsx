@@ -24,9 +24,9 @@ function ApplyLeave() {
     loadLeaveBalance();
   }, [employeeId]);
 
-  // Load periods when dates change (for teaching staff and HOD)
+  // Load periods when dates change (for teaching staff)
   useEffect(() => {
-    if ((user.role === "teaching" || user.role === "hod") && startDate && endDate && startDate <= endDate) {
+    if (user.role === "hod" && startDate && endDate && startDate <= endDate) {
       loadPeriods();
     } else {
       setPeriods([]);
@@ -123,18 +123,15 @@ function ApplyLeave() {
       return;
     }
 
-    // Check if it's emergency leave (period adjustments optional)
-    const isEmergencyLeave = description.toLowerCase().includes("emergency");
-
-    // For teaching staff and HOD, check if all periods are adjusted (unless emergency leave)
-    if ((user.role === "teaching" || user.role === "hod") && periods.length > 0 && !isEmergencyLeave) {
+    // For teaching staff, check if all periods are adjusted
+    if (user.role === "teaching" && periods.length > 0) {
       const unadjustedPeriods = periodAdjustments.filter(
-        p => !p.substituteFacultyId || (p.status !== "adjusted" && p.status !== "not_required")
+        p => !p.substituteFacultyId || p.status !== "adjusted"
       );
       if (unadjustedPeriods.length > 0) {
         setMessage({ 
           type: "error", 
-          text: `Please assign substitute faculty for all ${unadjustedPeriods.length} pending period(s) before submitting. For emergency leave, period adjustments are optional.` 
+          text: `Please assign substitute faculty for all ${unadjustedPeriods.length} pending period(s) before submitting.` 
         });
         return;
       }
@@ -149,7 +146,7 @@ function ApplyLeave() {
         startDate,
         endDate,
         description: description.trim(),
-        periodAdjustments: user.role === "teaching" ? periodAdjustments : []
+        periodAdjustments: user.role === "hod" ? periodAdjustments : []
       };
 
       const res = await axios.post(
@@ -326,7 +323,7 @@ function ApplyLeave() {
         </div>
 
         {/* Period Adjustments (Teaching Staff Only) */}
-        {user.role === "teaching" && (
+        {user.role === "hod" && (
           <div className="mb-6">
             {loading && startDate && endDate ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -453,7 +450,7 @@ function ApplyLeave() {
                   });
                 })()}
               </>
-            ) : user.role === "teaching" && startDate && endDate && !loading ? (
+            ) : user.role === "hod" && startDate && endDate && !loading ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <p className="text-sm text-green-800">
                   ✓ No periods scheduled during your leave period. You can proceed with the leave request.

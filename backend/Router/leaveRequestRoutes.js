@@ -15,6 +15,7 @@ router.get("/periods/:employeeId/:startDate/:endDate", leaveRequestController.ge
 router.get("/hod/pending/:hodId", leaveRequestController.getHodPendingRequests);
 router.get("/hod/all/:hodId", leaveRequestController.getHodDepartmentLeaveRequests);
 router.put("/hod/action/:leaveRequestId", leaveRequestController.hodApproveReject);
+router.put("/hod/update-periods/:leaveRequestId", leaveRequestController.hodUpdatePeriodAdjustments);
 
 // Director operations
 router.get("/director/pending/:directorId", leaveRequestController.getDirectorPendingRequests);

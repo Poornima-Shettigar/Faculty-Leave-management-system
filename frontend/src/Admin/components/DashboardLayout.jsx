@@ -99,7 +99,11 @@ function Sidebar() {
         {userRole === "hod" && (
           <>
             <li><NavLink to="faculty-list">View Faculty</NavLink></li>
-            <li><NavLink to="approve-leave">Approve Leave</NavLink></li>
+            <li><NavLink to="view-department-leaves">Approve Leave</NavLink></li>
+            <li><NavLink to="approve-leave">Pending leave Leave</NavLink></li>
+
+<li><NavLink to="apply-leave-hod">Apply Leave</NavLink></li>
+<li><NavLink to="my-leave-status">Leave Status</NavLink></li>
             <li><NavLink to="dept-reports">Department Reports</NavLink></li>
            <li className="menu-parent" onClick={() => setSubjectMenuOpen(!SubjectMenuOpen)}>
               Manage Subject ▾
