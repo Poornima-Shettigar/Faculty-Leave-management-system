@@ -89,7 +89,7 @@ function Sidebar() {
         )}
   {userRole === "non-teaching" && (
           <>
-            <li><NavLink to="view-timetable">My Timetable</NavLink></li>
+            {/* <li><NavLink to="view-timetable">My Timetable</NavLink></li> */}
             <li><NavLink to="apply-leave">Apply Leave</NavLink></li>
             <li><NavLink to="my-leave-status">Leave Status</NavLink></li>
           </>
@@ -104,7 +104,7 @@ function Sidebar() {
 
 <li><NavLink to="apply-leave-hod">Apply Leave</NavLink></li>
 <li><NavLink to="my-leave-status">Leave Status</NavLink></li>
-            <li><NavLink to="dept-reports">Department Reports</NavLink></li>
+            {/* <li><NavLink to="dept-reports">Department Reports</NavLink></li> */}
            <li className="menu-parent" onClick={() => setSubjectMenuOpen(!SubjectMenuOpen)}>
               Manage Subject ▾
             </li>
@@ -141,6 +141,7 @@ function Sidebar() {
             <li><NavLink to="all-dept-report">All Department Reports</NavLink></li>
             <li><NavLink to="analytics">Analytics Dashboard</NavLink></li>
             <li><NavLink to="director-settings">Director Settings</NavLink></li>
+            <li><NavLink to="approve-leave">Leave Request</NavLink></li>
           </>
         )}
       </ul>

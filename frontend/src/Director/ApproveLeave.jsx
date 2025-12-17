@@ -144,14 +144,115 @@ function ApproveLeave() {
                 </div>
               </div>
 
-              {request.periodAdjustments && request.periodAdjustments.length > 0 && (
+              {/* {request.periodAdjustments && request.periodAdjustments.length > 0 && (
                 <div className="mb-4">
                   <div className="text-sm text-gray-600 mb-2">Period Adjustments</div>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                    {request.periodAdjustments.length} period(s) need adjustment
+                    {request.periodAdjustments.length} period(s)  adjusted
                   </div>
                 </div>
-              )}
+              )} */}
+              {/* {request.periodAdjustments && request.periodAdjustments.length > 0 && (
+  <div className="mb-4">
+    <div className="text-sm font-medium text-gray-700 mb-2">
+      Period Adjustment Status
+    </div>
+
+    <div className="space-y-2">
+      {request.periodAdjustments.map((pa, index) => {
+        let statusText = "Needed";
+        let statusColor = "text-red-700";
+        let bgColor = "bg-red-50 border-red-200";
+
+        if (pa.status === "adjusted") {
+          statusText = "Adjusted";
+          statusColor = "text-green-700";
+          bgColor = "bg-green-50 border-green-200";
+        } else if (pa.status === "not_required") {
+          statusText = "Not Required";
+          statusColor = "text-gray-700";
+          bgColor = "bg-gray-50 border-gray-200";
+        }
+
+        return (
+          <div
+            key={index}
+            className={`flex flex-col md:flex-row md:justify-between md:items-center gap-2 p-3 rounded-lg border text-sm ${bgColor}`}
+          >
+            <div className="text-gray-800">
+              <div className="font-semibold">
+                {formatDate(pa.date)} ({pa.day})
+              </div>
+              <div className="text-xs text-gray-600">
+                Period {pa.period} | {pa.className}
+              </div>
+            </div>
+
+            <div className={`font-semibold ${statusColor}`}>
+              {statusText}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)} */}
+{request.periodAdjustments && request.periodAdjustments.length > 0 && (() => {
+  const totalPeriods = request.periodAdjustments.length;
+
+  const adjustedPeriods = request.periodAdjustments.filter(
+    pa => pa.status === "adjusted"
+  );
+
+  const adjustedCount = adjustedPeriods.length;
+
+  const adjustedWithFaculty = adjustedPeriods.filter(
+    pa => pa.substituteFacultyId
+  ).length;
+
+  const adjustedWithoutFaculty = adjustedCount - adjustedWithFaculty;
+
+  return (
+    <div className="mb-4">
+      <div className="text-sm font-medium text-gray-700 mb-2">
+        Period Adjustment Summary
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <div className="text-gray-600">Total Periods</div>
+          <div className="text-lg font-semibold text-gray-900">
+            {totalPeriods}
+          </div>
+        </div>
+
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="text-gray-600">Adjusted Periods</div>
+          <div className="text-lg font-semibold text-green-700">
+            {adjustedCount}
+          </div>
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="text-gray-600">Adjusted With Other Faculty</div>
+          <div className="text-lg font-semibold text-blue-700">
+            {adjustedWithFaculty}
+          </div>
+        </div>
+
+        {adjustedWithoutFaculty > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <div className="text-gray-600">Adjusted Without Other Faculty</div>
+            <div className="text-lg font-semibold text-yellow-700">
+              {adjustedWithoutFaculty}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+})()}
+
 
               <div className="flex gap-4">
                 <button
@@ -212,6 +313,12 @@ function ApproveLeave() {
 }
 
 export default ApproveLeave;
+
+
+
+
+
+
 
 
 

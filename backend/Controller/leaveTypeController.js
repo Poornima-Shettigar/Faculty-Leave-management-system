@@ -192,6 +192,35 @@ exports.getFacultyLeaveSummary = async (req, res) => {
       return res.status(200).json([]); // return empty array to prevent frontend errors
     }
 
+    // Calculate monthly and yearly usage from approved leave requests
+    const startOfYear = moment().startOf("year").toDate();
+    const endOfYear = moment().endOf("year").toDate();
+    const startOfMonth = moment().startOf("month").toDate();
+    const endOfMonth = moment().endOf("month").toDate();
+
+    const LeaveRequest = require("../Models/LeaveRequest");
+
+    const approvedRequests = await LeaveRequest.find({
+      employeeId,
+      status: "approved",
+      startDate: { $gte: startOfYear, $lte: endOfYear }
+    }).select("leaveTypeId totalDays startDate");
+
+    const yearlyUsage = {};
+    const monthlyUsage = {};
+
+    approvedRequests.forEach(reqDoc => {
+      const key = reqDoc.leaveTypeId.toString();
+      yearlyUsage[key] = (yearlyUsage[key] || 0) + (reqDoc.totalDays || 0);
+
+      if (
+        reqDoc.startDate >= startOfMonth &&
+        reqDoc.startDate <= endOfMonth
+      ) {
+        monthlyUsage[key] = (monthlyUsage[key] || 0) + (reqDoc.totalDays || 0);
+      }
+    });
+
     const formatted = leaves.map(entry => {
       const allowed = entry.totalLeaves || 0;
       const carry = entry.carryForwardLeaves || 0;
@@ -200,6 +229,8 @@ exports.getFacultyLeaveSummary = async (req, res) => {
       const totalAvailable = allowed + carry;
       const remaining = Math.max(totalAvailable - used, 0);
 
+      const key = entry.leaveTypeId?._id?.toString();
+
       return {
         leaveTypeId: entry.leaveTypeId?._id,
         leaveTypeName: entry.leaveTypeId?.name || "Unknown",
@@ -207,7 +238,9 @@ exports.getFacultyLeaveSummary = async (req, res) => {
         carryForwardLeaves: carry,
         usedLeaves: used,
         totalAvailable,
-        remainingLeaves: remaining
+        remainingLeaves: remaining,
+        usedThisYear: key ? yearlyUsage[key] || 0 : 0,
+        usedThisMonth: key ? monthlyUsage[key] || 0 : 0
       };
     });
 

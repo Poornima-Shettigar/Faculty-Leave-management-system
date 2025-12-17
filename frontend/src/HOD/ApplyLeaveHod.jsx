@@ -10,6 +10,8 @@ function ApplyLeave() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [description, setDescription] = useState("");
+  const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDaySession, setHalfDaySession] = useState("FN");
   const [periods, setPeriods] = useState([]);
   const [availableSubstitutes, setAvailableSubstitutes] = useState([]);
   const [periodAdjustments, setPeriodAdjustments] = useState([]);
@@ -109,6 +111,11 @@ function ApplyLeave() {
     setPeriodAdjustments(updated);
   };
 
+  const isCasualLeaveSelected = () => {
+    const lt = leaveTypes.find((t) => t._id === selectedLeaveType);
+    return lt && lt.name && lt.name.toLowerCase().includes("casual");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage({ type: "", text: "" });
@@ -146,7 +153,14 @@ function ApplyLeave() {
         startDate,
         endDate,
         description: description.trim(),
-        periodAdjustments: user.role === "hod" ? periodAdjustments : []
+        periodAdjustments: user.role === "hod" ? periodAdjustments : [],
+        // Half‑day casual leave support
+        isHalfDay:
+          isCasualLeaveSelected() && isHalfDay && startDate === endDate,
+        halfDaySession:
+          isCasualLeaveSelected() && isHalfDay && startDate === endDate
+            ? halfDaySession
+            : null
       };
 
       const res = await axios.post(
@@ -196,6 +210,11 @@ function ApplyLeave() {
       const end = new Date(endDate);
       const diffTime = Math.abs(end - start);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      if (isCasualLeaveSelected() && isHalfDay && startDate === endDate) {
+        return 0.5;
+      }
+
       return diffDays;
     }
     return 0;
@@ -289,6 +308,45 @@ function ApplyLeave() {
             />
           </div>
         </div>
+
+        {/* Half‑Day Option for Casual Leave */}
+        {isCasualLeaveSelected() && startDate && endDate && startDate === endDate && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Leave Duration (Casual)
+            </label>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="durationType"
+                  checked={!isHalfDay}
+                  onChange={() => setIsHalfDay(false)}
+                />
+                <span>Full Day</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="durationType"
+                  checked={isHalfDay}
+                  onChange={() => setIsHalfDay(true)}
+                />
+                <span>Half Day</span>
+              </label>
+              {isHalfDay && (
+                <select
+                  value={halfDaySession}
+                  onChange={(e) => setHalfDaySession(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="FN">Forenoon (FN)</option>
+                  <option value="AN">Afternoon (AN)</option>
+                </select>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Total Days */}
         {calculateDays() > 0 && (

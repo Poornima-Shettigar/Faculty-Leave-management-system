@@ -4,6 +4,7 @@ const EmployeeLeave = require("../Models/EmployeeLeave");
 const User = require("../Models/User");
 const Notification = require("../Models/Notification");
 const Timetable = require("../Models/Timetable");
+const Department = require("../Models/Department");
 const moment = require("moment");
 
 // Helper function to create notifications
@@ -331,6 +332,16 @@ exports.hodApproveReject = async (req, res) => {
       return res.status(400).json({ message: "Leave request is not pending HOD approval" });
     }
 
+    // Check if leave request is for upcoming days only
+    const today = moment().startOf("day");
+    const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
+    
+    if (leaveStartDate.isBefore(today)) {
+      return res.status(400).json({ 
+        message: "Cannot approve/reject leave requests that have already started. You can only approve/reject leaves for upcoming days." 
+      });
+    }
+
     const hod = await User.findById(hodId);
     if (!hod || hod.role !== "hod") {
       return res.status(403).json({ message: "Unauthorized. Only HOD can approve/reject" });
@@ -419,6 +430,20 @@ exports.directorApproveReject = async (req, res) => {
       return res.status(400).json({ message: "Leave request is not pending director approval" });
     }
 
+    // For APPROVAL: Director can approve only before the day of the leave start
+    const today = moment().startOf("day");
+    const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
+
+    if (action === "approve" && !leaveStartDate.isAfter(today)) {
+      return res.status(400).json({
+        message: "Director can approve leave only before the day of the leave start (at least 1 day in advance)."
+      });
+    }
+
+    if (!directorId) {
+      return res.status(403).json({ message: "Director id is missing in request." });
+    }
+
     const director = await User.findById(directorId);
     if (!director || director.role !== "director") {
       return res.status(403).json({ message: "Unauthorized. Only Director can approve/reject" });
@@ -446,7 +471,12 @@ exports.directorApproveReject = async (req, res) => {
       // Apply period adjustments if any
       if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
         for (const adjustment of leaveRequest.periodAdjustments) {
-          if (adjustment.substituteFacultyId) {
+          // Skip invalid adjustment records safely
+          if (!adjustment.substituteFacultyId || !adjustment.departmentId || !adjustment.className) {
+            continue;
+          }
+
+          try {
             const date = moment(adjustment.date);
             const dayName = date.format("dddd");
 
@@ -466,6 +496,9 @@ exports.directorApproveReject = async (req, res) => {
                 await timetable.save();
               }
             }
+          } catch (innerErr) {
+            // Log and continue with other adjustments instead of failing whole approval
+            console.error("Error applying period adjustment in director approval:", innerErr);
           }
         }
       }
@@ -757,6 +790,258 @@ exports.markNotificationRead = async (req, res) => {
 
   } catch (error) {
     console.error("Error marking notification as read:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// =============================
+//  GET DIRECTOR DASHBOARD STATS (Department-wise Faculty Availability)
+// =============================
+exports.getDirectorDashboardStats = async (req, res) => {
+  try {
+    const today = moment().startOf("day");
+    const todayEnd = moment().endOf("day");
+
+    // Get all departments
+    const departments = await Department.find().sort({ departmentName: 1 });
+    
+    const departmentStats = [];
+    
+    for (const dept of departments) {
+      // Get all faculty in this department
+      const faculty = await User.find({
+        departmentType: dept._id,
+        role: { $in: ["teaching", "non-teaching", "hod"] }
+      }).select("_id name email role");
+
+      // Get faculty on leave today
+      const facultyOnLeave = await LeaveRequest.find({
+        employeeId: { $in: faculty.map(f => f._id) },
+        status: "approved",
+        startDate: { $lte: todayEnd.toDate() },
+        endDate: { $gte: today.toDate() }
+      }).populate("employeeId", "name email role")
+        .populate("leaveTypeId", "name");
+
+      const facultyOnLeaveIds = new Set(facultyOnLeave.map(leave => leave.employeeId._id.toString()));
+      
+      const availableFaculty = faculty.filter(f => !facultyOnLeaveIds.has(f._id.toString()));
+      const onLeaveFaculty = faculty.filter(f => facultyOnLeaveIds.has(f._id.toString()));
+
+      // Get detailed leave information
+      const leaveDetails = facultyOnLeave.map(leave => ({
+        facultyId: leave.employeeId._id,
+        facultyName: leave.employeeId.name,
+        facultyEmail: leave.employeeId.email,
+        facultyRole: leave.employeeId.role,
+        leaveType: leave.leaveTypeId?.name || "N/A",
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        description: leave.description
+      }));
+
+      departmentStats.push({
+        departmentId: dept._id,
+        departmentName: dept.departmentName,
+        totalFaculty: faculty.length,
+        availableFaculty: availableFaculty.length,
+        facultyOnLeave: onLeaveFaculty.length,
+        availableFacultyList: availableFaculty.map(f => ({
+          facultyId: f._id,
+          name: f.name,
+          email: f.email,
+          role: f.role
+        })),
+        leaveDetails: leaveDetails
+      });
+    }
+
+    // Get overall stats
+    const totalDepartments = departments.length;
+    const totalFaculty = await User.countDocuments({
+      role: { $in: ["teaching", "non-teaching", "hod"] }
+    });
+    
+    const allApprovedLeavesToday = await LeaveRequest.countDocuments({
+      status: "approved",
+      startDate: { $lte: todayEnd.toDate() },
+      endDate: { $gte: today.toDate() }
+    });
+
+    const pendingLeaves = await LeaveRequest.countDocuments({
+      status: "pending_director"
+    });
+
+    const approvedLeaves = await LeaveRequest.countDocuments({
+      status: "approved"
+    });
+
+    res.json({
+      totalDepartments,
+      totalFaculty,
+      pendingLeaves,
+      approvedLeaves,
+      facultyOnLeaveToday: allApprovedLeavesToday,
+      departmentStats
+    });
+
+  } catch (error) {
+    console.error("Error fetching director dashboard stats:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// =============================
+//  GET HOD DASHBOARD STATS (Faculty Absence Details for Current Date)
+// =============================
+exports.getHodDashboardStats = async (req, res) => {
+  try {
+    const { departmentId } = req.params;
+    const today = moment().startOf("day");
+    const todayEnd = moment().endOf("day");
+
+    // Get HOD's department
+    const department = await Department.findById(departmentId);
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    // Get all faculty in this department
+    const faculty = await User.find({
+      departmentType: departmentId,
+      role: { $in: ["teaching", "non-teaching"] }
+    }).select("_id name email role");
+
+    // Get faculty on leave today
+    const facultyOnLeave = await LeaveRequest.find({
+      employeeId: { $in: faculty.map(f => f._id) },
+      status: "approved",
+      startDate: { $lte: todayEnd.toDate() },
+      endDate: { $gte: today.toDate() }
+    }).populate("employeeId", "name email role")
+      .populate("leaveTypeId", "name");
+
+    const facultyOnLeaveIds = new Set(facultyOnLeave.map(leave => leave.employeeId._id.toString()));
+    
+    const availableFaculty = faculty.filter(f => !facultyOnLeaveIds.has(f._id.toString()));
+    const onLeaveFaculty = faculty.filter(f => facultyOnLeaveIds.has(f._id.toString()));
+
+    // Get detailed absence information
+    const absenceDetails = facultyOnLeave.map(leave => ({
+      facultyId: leave.employeeId._id,
+      facultyName: leave.employeeId.name,
+      facultyEmail: leave.employeeId.email,
+      facultyRole: leave.employeeId.role,
+      leaveType: leave.leaveTypeId?.name || "N/A",
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      totalDays: leave.totalDays,
+      description: leave.description,
+      periodAdjustments: leave.periodAdjustments || []
+    }));
+
+    // Get pending and approved leave counts
+    const pendingLeaves = await LeaveRequest.countDocuments({
+      employeeId: { $in: faculty.map(f => f._id) },
+      status: "pending_hod"
+    });
+
+    const approvedLeaves = await LeaveRequest.countDocuments({
+      employeeId: { $in: faculty.map(f => f._id) },
+      status: { $in: ["approved", "pending_director"] }
+    });
+
+    const rejectedLeaves = await LeaveRequest.countDocuments({
+      employeeId: { $in: faculty.map(f => f._id) },
+      status: { $in: ["rejected_by_hod", "rejected_by_director"] }
+    });
+
+    res.json({
+      departmentId: department._id,
+      departmentName: department.departmentName,
+      totalFaculty: faculty.length,
+      availableFaculty: availableFaculty.length,
+      facultyOnLeave: onLeaveFaculty.length,
+      pendingLeaves,
+      approvedLeaves,
+      rejectedLeaves,
+      absenceDetails,
+      availableFacultyList: availableFaculty.map(f => ({
+        facultyId: f._id,
+        name: f.name,
+        email: f.email,
+        role: f.role
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error fetching HOD dashboard stats:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// =============================
+// GET LEAVE ANALYTICS FOR DEPARTMENT (CURRENT YEAR)
+// =============================
+exports.getDepartmentLeaveAnalytics = async (req, res) => {
+  try {
+    const { departmentId } = req.params;
+    const currentYear = new Date().getFullYear();
+    const startOfYear = new Date(currentYear, 0, 1);
+    const endOfYear = new Date(currentYear, 11, 31);
+
+    // 1) Get ALL faculty in this department (teaching, non‑teaching, HOD)
+    const facultyList = await User.find({
+      departmentType: departmentId,
+      role: { $in: ["teaching", "non-teaching", "hod"] }
+    }).select("name email");
+
+    // 2) Get all approved leave requests for this department in current year
+    const leaveRequests = await LeaveRequest.find({
+      status: "approved",
+      startDate: { $gte: startOfYear, $lte: endOfYear }
+    }).populate({
+      path: "employeeId",
+      match: { departmentType: departmentId, role: { $in: ["teaching", "non-teaching", "hod"] } },
+      select: "name email"
+    });
+
+    // Filter out null employeeId (those not in department)
+    const validRequests = leaveRequests.filter(req => req.employeeId);
+
+    // 3) Prepare map with ALL faculty, defaulting to 0 leave usage
+    const facultyLeaveMap = {};
+
+    facultyList.forEach(fac => {
+      const id = fac._id.toString();
+      facultyLeaveMap[id] = {
+        name: fac.name,
+        email: fac.email,
+        totalDays: 0,
+        leaveCount: 0
+      };
+    });
+
+    // 4) Add leave stats for those who actually took leave
+    validRequests.forEach(request => {
+      const facultyId = request.employeeId._id.toString();
+      if (!facultyLeaveMap[facultyId]) {
+        facultyLeaveMap[facultyId] = {
+          name: request.employeeId.name,
+          email: request.employeeId.email,
+          totalDays: 0,
+          leaveCount: 0
+        };
+      }
+      facultyLeaveMap[facultyId].totalDays += request.totalDays;
+      facultyLeaveMap[facultyId].leaveCount += 1;
+    });
+
+    const analytics = Object.values(facultyLeaveMap);
+
+    res.status(200).json(analytics);
+  } catch (error) {
+    console.error("Error fetching department leave analytics:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

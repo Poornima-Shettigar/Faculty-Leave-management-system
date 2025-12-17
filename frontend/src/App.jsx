@@ -51,18 +51,22 @@ import DirectorApproveLeave from "./Director/ApproveLeave.jsx";
 import FacultyDashboard from "./Faculty/FacultyDashboard.jsx"
 import ViewApprovedLeaves from "./Director/ViewApprovedLeaves.jsx";
 import ApplyLeaveHod from "./HOD/ApplyLeaveHod.jsx"
+import DashboardHome from "./Nonteaching/DashboardHome.jsx";
+import ViewFacultylist from "./HOD/ViewFacultylist.jsx"
+import AllDeptReport from "./Director/AllDeptReport.jsx"
+import AnalyticsDashboard from "./Director/AnalyticsDashboard.jsx"
 import {
  
  
   DeleteUser,
-  DashboardHome,
+ 
   
   DeleteTimetable,
 
   FacultyList,
   DeptReports,
-  AllDeptReport,
-  AnalyticsDashboard,
+  
+  
   DirectorSettings
 } from "./Admin/Pages/Placeholders";
 
@@ -155,7 +159,7 @@ function App() {
           >
             <Route index element={<DashboardHome />} />
             <Route path="home" element={<DashboardHome />} />
-            <Route path="faculty-list" element={<FacultyList />} />
+            <Route path="faculty-list" element={<ViewFacultylist />} />
             <Route path="approve-leave" element={<HodApproveLeave />} />
             <Route path="view-department-leaves" element={<ViewDepartmentLeaves />} />
             <Route path="apply-leave-hod" element={<ApplyLeaveHod />} />
@@ -189,7 +193,7 @@ function App() {
             <Route path="view-approved-leaves" element={<ViewApprovedLeaves />} />
             <Route path="all-dept-report" element={<AllDeptReport />} />
             <Route path="analytics" element={<AnalyticsDashboard />} />
-            <Route path="director-settings" element={<DirectorSettings />} />
+            {/* <Route path="director-settings" element={<DirectorSettings />} /> */}
           </Route>
 
           {/* ---------------- Utility Pages ---------------- */}

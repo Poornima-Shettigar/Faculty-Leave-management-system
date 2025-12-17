@@ -26,6 +26,11 @@ router.put("/director/action/:leaveRequestId", leaveRequestController.directorAp
 router.get("/notifications/:userId", leaveRequestController.getNotifications);
 router.put("/notifications/:notificationId/read", leaveRequestController.markNotificationRead);
 
+// Dashboard Stats
+router.get("/director/stats", leaveRequestController.getDirectorDashboardStats);
+router.get("/hod/stats/:departmentId", leaveRequestController.getHodDashboardStats);
+router.get("/analytics/department/:departmentId", leaveRequestController.getDepartmentLeaveAnalytics);
+
 module.exports = router;
 
 
