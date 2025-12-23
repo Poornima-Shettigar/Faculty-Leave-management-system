@@ -37,6 +37,7 @@ import ViewSubjects from "./Admin/Pages/ViewSubjects";
 // Import all placeholder dashboard pages
 import AddLeave from "./Admin/Pages/AddLeave.jsx"
 import DeleteLeave from "./Admin/Pages/LeaveTypeManagement.jsx"
+import FacultyLeaveReport from "./Admin/Pages/FacultyLeaveReport.jsx"
 import DashboardHome1 from "./Nonteaching/DashboardHome.jsx"
 import Addclass from "./Nonteaching/ManageClasses.jsx"
 import Editdeleteclass from "./Nonteaching/editdeleteclass.jsx";
@@ -105,6 +106,7 @@ function App() {
             <Route path="delete-dept" element={<DeleteDepartment />} />
             <Route path="leave-add" element={<AddLeave />} />
             <Route path="leave-delete" element={<DeleteLeave />} />
+            <Route path="leave-report" element={<FacultyLeaveReport />} />
             <Route path="timetable-add" element={<AddTimetable />} />
             <Route path="timetable-view" element={<ViewTimetable />} />
             <Route path="add-sub" element={<AddSubject />} />

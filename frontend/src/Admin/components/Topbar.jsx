@@ -77,20 +77,46 @@ function Topbar() {
     }
   };
 
-  const handleNotificationClick = (notification) => {
-    if (!notification.isRead) {
-      markAsRead(notification._id);
+  // const handleNotificationClick = (notification) => {
+  //   if (!notification.isRead) {
+  //     markAsRead(notification._id);
+  //   }
+  //   setNotificationsOpen(false);
+  //   // Navigate to relevant page based on notification type
+  //   if (notification.type.includes("leave")) {
+  //     if (user.role === "hod" || user.role === "director") {
+  //       window.location.href = `/${user.role}/dashboard/approve-leave`;
+  //     } else {
+  //       window.location.href = `/${user.role === "teaching" ? "faculty" : "non-teaching"}/dashboard/my-leave-status`;
+  //     }
+  //   }
+  // };
+const handleNotificationClick = (notification) => {
+
+  if (!notification.isRead) {
+    markAsRead(notification._id);
+  }
+
+  setNotificationsOpen(false);
+
+  // ============== substitute assignment navigation ============
+  if (notification.type === "substitute_assignment") {
+    window.location.href = "/faculty/dashboard/substitute-classes";
+    return;
+  }
+
+  // ============== leave flow =================
+  if (notification.type.includes("leave")) {
+
+    if (user.role === "hod" || user.role === "director") {
+      window.location.href = `/${user.role}/dashboard/approve-leave`;
+    } else {
+      window.location.href = `/${user.role === "teaching" ? "faculty" : "non-teaching"}/dashboard/my-leave-status`;
     }
-    setNotificationsOpen(false);
-    // Navigate to relevant page based on notification type
-    if (notification.type.includes("leave")) {
-      if (user.role === "hod" || user.role === "director") {
-        window.location.href = `/${user.role}/dashboard/approve-leave`;
-      } else {
-        window.location.href = `/${user.role === "teaching" ? "faculty" : "non-teaching"}/dashboard/my-leave-status`;
-      }
-    }
-  };
+
+    return;
+  }
+};
 
   const formatDate = (date) => {
     const d = new Date(date);
@@ -109,12 +135,13 @@ function Topbar() {
     }
   };
 
-  const getNotificationIcon = (type) => {
-    if (type.includes("approved")) return "✓";
-    if (type.includes("rejected")) return "✗";
-    if (type.includes("requested")) return "📋";
-    return "🔔";
-  };
+const getNotificationIcon = (type) => {
+  if (type === "substitute_assignment") return "👨‍🏫";
+  if (type.includes("approved")) return "✓";
+  if (type.includes("rejected")) return "✗";
+  if (type.includes("requested")) return "📋";
+  return "🔔";
+};
 
   const logout = () => {
     localStorage.removeItem("user");

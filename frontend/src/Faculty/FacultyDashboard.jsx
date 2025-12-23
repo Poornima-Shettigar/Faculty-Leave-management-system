@@ -38,7 +38,7 @@ function LeaveStatus() {
 
   return (
     <div className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-      <h2 className="text-xl font-semibold mb-4">My Leave Requests</h2>
+      <h2 className="text-xl font-semibold mb-4">My Leave Requests1</h2>
 
       {loading ? (
         <p className="text-gray-600">Loading leave status...</p>

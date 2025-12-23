@@ -31,6 +31,12 @@ router.get("/director/stats", leaveRequestController.getDirectorDashboardStats);
 router.get("/hod/stats/:departmentId", leaveRequestController.getHodDashboardStats);
 router.get("/analytics/department/:departmentId", leaveRequestController.getDepartmentLeaveAnalytics);
 
+// Director operations
+// router.get("/director/pending/:directorId", leaveRequestController.getDirectorPendingRequests);
+// router.get("/director/approved/:directorId", leaveRequestController.getDirectorApprovedLeaves);
+// ADD THIS LINE BELOW:
+router.get("/director/all/:directorId", leaveRequestController.getDirectorAllRequests); 
+// router.put("/director/action/:leaveRequestId", leaveRequestController.directorApproveReject);
 module.exports = router;
 
 

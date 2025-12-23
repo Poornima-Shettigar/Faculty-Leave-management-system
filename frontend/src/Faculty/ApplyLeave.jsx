@@ -1,489 +1,286 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 
 function ApplyLeave() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
   const employeeId = user._id || user.id;
 
+  // Form States
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [selectedLeaveType, setSelectedLeaveType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [description, setDescription] = useState("");
+  
+  // Half Day States
+  const [isHalfDay, setIsHalfDay] = useState(false);
+  const [halfDaySession, setHalfDaySession] = useState("morning"); // "morning" or "afternoon"
+
+  // Period/Adjustment States
   const [periods, setPeriods] = useState([]);
   const [availableSubstitutes, setAvailableSubstitutes] = useState([]);
   const [periodAdjustments, setPeriodAdjustments] = useState([]);
-  const [subjectsMap, setSubjectsMap] = useState({}); // Map to store subjects by ID
+  const [subjectsMap, setSubjectsMap] = useState({});
+  
+  // UI States
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const [leaveBalance, setLeaveBalance] = useState([]);
 
-  // Load leave types and balance
+  // Load initial data
   useEffect(() => {
     loadLeaveTypes();
     loadLeaveBalance();
   }, [employeeId]);
 
-  // Load periods when dates change (for teaching staff and HOD)
+  // Load periods when dates change
   useEffect(() => {
-    if ((user.role === "teaching" || user.role === "hod") && startDate && endDate && startDate <= endDate) {
-      loadPeriods();
+    const effectiveEndDate = isHalfDay ? startDate : endDate;
+    if ((user.role === "teaching" || user.role === "hod") && startDate && effectiveEndDate && startDate <= effectiveEndDate) {
+      loadPeriods(startDate, effectiveEndDate);
     } else {
       setPeriods([]);
       setPeriodAdjustments([]);
     }
-  }, [startDate, endDate, user.role]);
+  }, [startDate, endDate, isHalfDay, user.role]);
+
+  // Logic: Check if current leave is Casual Leave
+  const isCasualLeave = () => {
+    const lt = leaveTypes.find((t) => t._id === selectedLeaveType);
+    return lt?.name.toLowerCase().includes("casual");
+  };
+
+  // Logic: Filter adjustments based on session
+  const filteredAdjustments = useMemo(() => {
+    if (!isHalfDay) return periodAdjustments;
+    return periodAdjustments.filter((p) => {
+      const pNum = parseInt(p.period);
+      return halfDaySession === "morning" ? pNum <= 3 : pNum > 3;
+    });
+  }, [periodAdjustments, isHalfDay, halfDaySession]);
 
   const loadLeaveTypes = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/leaveType/list");
       const userRole = user.role?.toLowerCase();
-      const filtered = res.data.filter(
-        (lt) => lt.roles && lt.roles.includes(userRole)
-      );
-      setLeaveTypes(filtered);
+      setLeaveTypes(res.data.filter((lt) => lt.roles?.includes(userRole)));
     } catch (err) {
-      console.error("Error loading leave types:", err);
       setMessage({ type: "error", text: "Failed to load leave types" });
     }
   };
 
   const loadLeaveBalance = async () => {
     try {
-      const res = await axios.get(
-        `http://localhost:5000/api/leaveType/faculty/${employeeId}/leaves`
-      );
+      const res = await axios.get(`http://localhost:5000/api/leaveType/faculty/${employeeId}/leaves`);
       setLeaveBalance(res.data || []);
-    } catch (err) {
-      console.error("Error loading leave balance:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const loadPeriods = async () => {
+  const loadPeriods = async (start, end) => {
     try {
       setLoading(true);
-      const res = await axios.get(
-        `http://localhost:5000/api/leave-request/periods/${employeeId}/${startDate}/${endDate}`
-      );
+      const res = await axios.get(`http://localhost:5000/api/leave-request/periods/${employeeId}/${start}/${end}`);
       const fetchedPeriods = res.data.periods || [];
       setPeriods(fetchedPeriods);
       setAvailableSubstitutes(res.data.availableSubstitutes || []);
       
-      // Fetch subjects for all unique classes
+      // Fetch subjects map
       const uniqueClasses = [...new Set(fetchedPeriods.map(p => ({ dept: p.departmentId, class: p.className })))];
       const subjectsData = {};
-      
-      for (const { dept, class: className } of uniqueClasses) {
+      for (const item of uniqueClasses) {
         try {
-          // Fetch all subjects for the class (all semesters)
-          const subRes = await axios.get(`http://localhost:5000/api/subject/${dept}/${className}/all`);
-          subRes.data.forEach(sub => {
-            subjectsData[sub._id] = sub.subjectName;
-          });
-        } catch (err) {
-          console.error(`Error loading subjects for ${className}:`, err);
-        }
+          const subRes = await axios.get(`http://localhost:5000/api/subject/${item.dept}/${item.class}/all`);
+          subRes.data.forEach(sub => { subjectsData[sub._id] = sub.subjectName; });
+        } catch (e) { console.error(e); }
       }
       setSubjectsMap(subjectsData);
       
-      // Initialize period adjustments
-      const adjustments = fetchedPeriods.map((p) => ({
+      setPeriodAdjustments(fetchedPeriods.map(p => ({
         ...p,
         substituteFacultyId: null,
         status: "pending"
-      }));
-      setPeriodAdjustments(adjustments);
+      })));
     } catch (err) {
-      console.error("Error loading periods:", err);
       setPeriods([]);
       setPeriodAdjustments([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  const updateSubstitute = (index, substituteId) => {
+  const updateSubstitute = (originalIndex, substituteId) => {
     const updated = [...periodAdjustments];
-    updated[index].substituteFacultyId = substituteId;
-    updated[index].status = substituteId ? "adjusted" : "pending";
+    updated[originalIndex].substituteFacultyId = substituteId;
+    updated[originalIndex].status = substituteId ? "adjusted" : "pending";
     setPeriodAdjustments(updated);
+  };
+
+  const calculateDays = () => {
+    if (isHalfDay) return 0.5;
+    if (startDate && endDate && startDate <= endDate) {
+      const diff = Math.abs(new Date(endDate) - new Date(startDate));
+      return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+    }
+    return 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: "", text: "" });
+    const isEmergency = description.toLowerCase().includes("emergency");
 
-    if (!selectedLeaveType || !startDate || !endDate || !description.trim()) {
-      setMessage({ type: "error", text: "Please fill all required fields" });
-      return;
-    }
-
-    if (new Date(endDate) < new Date(startDate)) {
-      setMessage({ type: "error", text: "End date must be after start date" });
-      return;
-    }
-
-    // Check if it's emergency leave (period adjustments optional)
-    const isEmergencyLeave = description.toLowerCase().includes("emergency");
-
-    // For teaching staff and HOD, check if all periods are adjusted (unless emergency leave)
-    if ((user.role === "teaching" || user.role === "hod") && periods.length > 0 && !isEmergencyLeave) {
-      const unadjustedPeriods = periodAdjustments.filter(
-        p => !p.substituteFacultyId || (p.status !== "adjusted" && p.status !== "not_required")
-      );
-      if (unadjustedPeriods.length > 0) {
-        setMessage({ 
-          type: "error", 
-          text: `Please assign substitute faculty for all ${unadjustedPeriods.length} pending period(s) before submitting. For emergency leave, period adjustments are optional.` 
-        });
+    if ((user.role === "teaching" || user.role === "hod") && !isEmergency) {
+      const unadjusted = filteredAdjustments.filter(p => !p.substituteFacultyId);
+      if (unadjusted.length > 0) {
+        setMessage({ type: "error", text: `Please adjust all ${unadjusted.length} periods for the ${halfDaySession} session.` });
         return;
       }
     }
 
     setLoading(true);
-
     try {
       const payload = {
         employeeId,
         leaveTypeId: selectedLeaveType,
         startDate,
-        endDate,
-        description: description.trim(),
-        periodAdjustments: user.role === "teaching" ? periodAdjustments : []
+        endDate: isHalfDay ? startDate : endDate,
+        description,
+        isHalfDay,
+        halfDaySession: isHalfDay ? halfDaySession : null,
+        totalDays: calculateDays(),
+        periodAdjustments: (user.role === "teaching" || user.role === "hod") ? filteredAdjustments : []
       };
 
-      const res = await axios.post(
-        "http://localhost:5000/api/leave-request/apply",
-        payload
-      );
-
-      setMessage({
-        type: "success",
-        text: "Leave request submitted successfully!"
-      });
-
-      // Reset form
-      setSelectedLeaveType("");
-      setStartDate("");
-      setEndDate("");
-      setDescription("");
-      setPeriodAdjustments([]);
-      setPeriods([]);
-      loadLeaveBalance();
-
-      // Clear message after 5 seconds
-      setTimeout(() => setMessage({ type: "", text: "" }), 5000);
+      await axios.post("http://localhost:5000/api/leave-request/apply", payload);
+      setMessage({ type: "success", text: "Leave request submitted!" });
+      // Reset logic...
     } catch (err) {
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Failed to submit leave request"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getLeaveTypeName = (id) => {
-    const lt = leaveTypes.find((t) => t._id === id);
-    return lt ? lt.name : "";
-  };
-
-  const getRemainingLeaves = (leaveTypeId) => {
-    const balance = leaveBalance.find((b) => b.leaveTypeId === leaveTypeId);
-    return balance ? balance.remainingLeaves : 0;
-  };
-
-  const calculateDays = () => {
-    if (startDate && endDate && startDate <= endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      return diffDays;
-    }
-    return 0;
+      setMessage({ type: "error", text: err.response?.data?.message || "Submission failed" });
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Apply for Leave</h1>
+    <div className="p-8 max-w-6xl mx-auto font-sans text-gray-800">
+      <h1 className="text-3xl font-bold mb-6">Apply for Leave</h1>
 
-      {/* Leave Balance Card */}
+      {/* Leave Balance */}
       {leaveBalance.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">Your Leave Balance</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            {leaveBalance.map((leave) => (
-              <div key={leave.leaveTypeId} className="bg-white p-3 rounded">
-                <div className="text-gray-600">{leave.leaveTypeName}</div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {leave.remainingLeaves}
-                </div>
-                <div className="text-xs text-gray-500">remaining</div>
-              </div>
-            ))}
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {leaveBalance.map((lb) => (
+            <div key={lb.leaveTypeId} className="bg-blue-50 p-4 rounded-lg border border-blue-100 shadow-sm">
+              <p className="text-xs text-blue-600 font-bold uppercase">{lb.leaveTypeName}</p>
+              <p className="text-2xl font-black">{lb.remainingLeaves}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Message */}
       {message.text && (
-        <div
-          className={`mb-6 p-4 rounded-lg ${
-            message.type === "error"
-              ? "bg-red-100 text-red-800 border border-red-300"
-              : "bg-green-100 text-green-800 border border-green-300"
-          }`}
-        >
+        <div className={`p-4 rounded-lg mb-6 border ${message.type === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"}`}>
           {message.text}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white shadow-lg rounded-xl p-6 border border-gray-200">
-        {/* Leave Type */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Leave Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={selectedLeaveType}
-            onChange={(e) => setSelectedLeaveType(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            required
-          >
-            <option value="">Select Leave Type</option>
-            {leaveTypes.map((lt) => {
-              const remaining = getRemainingLeaves(lt._id);
-              return (
-                <option key={lt._id} value={lt._id}>
-                  {lt.name} ({remaining} remaining)
-                </option>
-              );
-            })}
-          </select>
-        </div>
-
-        {/* Date Range */}
+      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-xl border border-gray-100">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Start Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              min={new Date().toISOString().split("T")[0]}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          {/* Leave Type */}
+          <div className="col-span-2 md:col-span-1">
+            <label className="block text-sm font-semibold mb-2">Leave Type *</label>
+            <select 
+              className="w-full border rounded-lg p-2.5" 
+              value={selectedLeaveType} 
+              onChange={(e) => setSelectedLeaveType(e.target.value)} 
               required
-            />
+            >
+              <option value="">-- Choose --</option>
+              {leaveTypes.map(lt => (
+                <option key={lt._id} value={lt._id}>{lt.name}</option>
+              ))}
+            </select>
           </div>
+
+          {/* Half Day Toggle */}
+          {isCasualLeave() && (
+            <div className="col-span-2 md:col-span-1 flex items-end pb-1">
+              <div className="flex items-center gap-4 bg-orange-50 p-2 rounded-lg border border-orange-200 w-full">
+                <label className="flex items-center cursor-pointer ml-2">
+                  <input type="checkbox" checked={isHalfDay} onChange={(e) => setIsHalfDay(e.target.checked)} className="w-4 h-4" />
+                  <span className="ml-2 text-sm font-bold">Half Day</span>
+                </label>
+                {isHalfDay && (
+                  <div className="flex bg-white rounded border overflow-hidden ml-auto">
+                    <button type="button" onClick={() => setHalfDaySession("morning")} className={`px-3 py-1 text-xs ${halfDaySession === "morning" ? "bg-blue-600 text-white" : ""}`}>Morning</button>
+                    <button type="button" onClick={() => setHalfDaySession("afternoon")} className={`px-3 py-1 text-xs ${halfDaySession === "afternoon" ? "bg-blue-600 text-white" : ""}`}>Afternoon</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Dates */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              End Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              min={startDate || new Date().toISOString().split("T")[0]}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
+            <label className="block text-sm font-semibold mb-2">{isHalfDay ? "Date *" : "Start Date *"}</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg p-2.5" required />
           </div>
+          {!isHalfDay && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">End Date *</label>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border rounded-lg p-2.5" required />
+            </div>
+          )}
         </div>
 
-        {/* Total Days */}
-        {calculateDays() > 0 && (
+        {/* Adjustments Section */}
+        {filteredAdjustments.length > 0 && (
           <div className="mb-6">
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <span className="text-sm text-gray-600">Total Days: </span>
-              <span className="text-lg font-semibold text-gray-900">
-                {calculateDays()} day(s)
-              </span>
-              {selectedLeaveType && (
-                <span className="ml-4 text-sm text-gray-600">
-                  (Remaining: {getRemainingLeaves(selectedLeaveType)})
-                </span>
-              )}
+            <h3 className="text-lg font-bold text-gray-700 mb-3 border-b pb-2">
+              Required Adjustments for {isHalfDay ? halfDaySession.toUpperCase() : "Full Day"}
+            </h3>
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 uppercase text-gray-500 font-bold">
+                  <tr>
+                    <th className="px-4 py-3">Period</th>
+                    <th className="px-4 py-3">Class & Subject</th>
+                    <th className="px-4 py-3">Assign Substitute</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {filteredAdjustments.map((p) => {
+                    // Find original index to update the correct object in state
+                    const originalIdx = periodAdjustments.findIndex(orig => orig.period === p.period && orig.date === p.date);
+                    return (
+                      <tr key={`${p.date}-${p.period}`} className={p.substituteFacultyId ? "bg-green-50" : ""}>
+                        <td className="px-4 py-3 font-bold">P{p.period}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{p.className}</div>
+                          <div className="text-xs text-gray-500">{subjectsMap[p.subjectId] || "Loading..."}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <select 
+                            className="w-full border rounded p-1.5 bg-white"
+                            value={p.substituteFacultyId || ""}
+                            onChange={(e) => updateSubstitute(originalIdx, e.target.value)}
+                          >
+                            <option value="">-- Select Faculty --</option>
+                            {availableSubstitutes.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                          </select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* Description */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description/Reason <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows="4"
-            className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Please provide a reason for your leave request..."
-            required
-          />
+          <label className="block text-sm font-semibold mb-2">Reason *</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border rounded-lg p-2.5" rows="3" placeholder="Explain why..." required />
         </div>
 
-        {/* Period Adjustments (Teaching Staff Only) */}
-        {user.role === "teaching" && (
-          <div className="mb-6">
-            {loading && startDate && endDate ? (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-blue-800">Loading your scheduled periods...</p>
-              </div>
-            ) : periods.length > 0 ? (
-              <>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                  Period Adjustments Required
-                </h3>
-                {(() => {
-                  const adjustedCount = periodAdjustments.filter(p => p.substituteFacultyId && p.status === "adjusted").length;
-                  const pendingCount = periods.length - adjustedCount;
-                  return (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-sm text-yellow-800 font-medium">
-                          ⚠️ You have {periods.length} period(s) scheduled during your leave period.
-                        </p>
-                        <div className="flex gap-4 text-xs">
-                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded">
-                            Adjusted: {adjustedCount}
-                          </span>
-                          <span className="bg-red-100 text-red-800 px-2 py-1 rounded">
-                            Pending: {pendingCount}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-yellow-700">
-                        Please assign substitute faculty for each period. Leave requests cannot be submitted until all periods are adjusted.
-                      </p>
-                    </div>
-                  );
-                })()}
-                
-                {/* Group periods by date */}
-                {(() => {
-                  const periodsByDate = {};
-                  periodAdjustments.forEach((period, index) => {
-                    if (!periodsByDate[period.date]) {
-                      periodsByDate[period.date] = [];
-                    }
-                    periodsByDate[period.date].push({ ...period, index });
-                  });
-
-                  return Object.keys(periodsByDate).sort().map((date) => {
-                    const datePeriods = periodsByDate[date];
-                    const dateObj = new Date(date);
-                    const formattedDate = dateObj.toLocaleDateString("en-US", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric"
-                    });
-
-                    return (
-                      <div key={date} className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
-                        <div className="bg-blue-600 text-white px-4 py-3">
-                          <h4 className="font-semibold">{formattedDate}</h4>
-                          <p className="text-sm text-blue-100">
-                            {datePeriods.length} period(s) scheduled
-                          </p>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full">
-                            <thead className="bg-gray-100">
-                              <tr>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Period</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Class</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Subject</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Assign Substitute Faculty</th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {datePeriods.map((period) => {
-                                const subjectName = subjectsMap[period.subjectId] || "N/A";
-                                const isAdjusted = period.substituteFacultyId && period.status === "adjusted";
-                                
-                                return (
-                                  <tr key={period.index} className={isAdjusted ? "bg-green-50" : "bg-white hover:bg-gray-50"}>
-                                    <td className="px-4 py-3 text-sm font-medium">
-                                      Period {period.period}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm">{period.className}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{subjectName}</td>
-                                    <td className="px-4 py-3">
-                                      <select
-                                        value={period.substituteFacultyId || ""}
-                                        onChange={(e) => updateSubstitute(period.index, e.target.value)}
-                                        className={`w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 ${
-                                          isAdjusted 
-                                            ? "border-green-300 bg-white" 
-                                            : "border-red-300 bg-red-50"
-                                        }`}
-                                      >
-                                        <option value="">-- Select Substitute --</option>
-                                        {availableSubstitutes.map((sub) => (
-                                          <option key={sub._id} value={sub._id}>
-                                            {sub.name} ({sub.email})
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      {isAdjusted ? (
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                          ✓ Assigned
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                          ⚠ Pending
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </>
-            ) : user.role === "teaching" && startDate && endDate && !loading ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-green-800">
-                  ✓ No periods scheduled during your leave period. You can proceed with the leave request.
-                </p>
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        {/* Submit Button */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedLeaveType("");
-              setStartDate("");
-              setEndDate("");
-              setDescription("");
-              setPeriodAdjustments([]);
-            }}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-          >
-            Reset
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Submitting..." : "Submit Leave Request"}
+        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+          <div className="text-lg font-bold">Total Duration: <span className="text-blue-600">{calculateDays()} Day(s)</span></div>
+          <button type="submit" disabled={loading} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">
+            {loading ? "Submitting..." : "Submit Application"}
           </button>
         </div>
       </form>
@@ -492,4 +289,3 @@ function ApplyLeave() {
 }
 
 export default ApplyLeave;
-

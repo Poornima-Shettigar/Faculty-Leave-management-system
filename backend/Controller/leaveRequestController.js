@@ -90,39 +90,33 @@ exports.applyLeaveRequest = async (req, res) => {
 
     const totalDays = end.diff(start, "days") + 1;
 
-    // Check if it's emergency leave (description contains "emergency")
-    const isEmergencyLeave = description.toLowerCase().includes("emergency");
+    // Check leave type
+    const leaveType = await LeaveType.findById(leaveTypeId);
+    if (!leaveType) return res.status(404).json({ message: "Leave type not found" });
 
-    // Check leave balance
-    const employeeLeave = await EmployeeLeave.findOne({
-      employeeId,
-      leaveTypeId
-    });
+    // Fetch employee leave allocation
+    const employeeLeave = await EmployeeLeave.findOne({ employeeId, leaveTypeId });
+    if (!employeeLeave) return res.status(400).json({ message: "Leave type not allocated to this employee" });
 
-    if (!employeeLeave) {
-      return res.status(400).json({ message: "Leave type not allocated to this employee" });
+    // For DEDUCT type, check leave balance
+    if (leaveType.leaveAction === "DEDUCT") {
+      const totalAvailable = (employeeLeave.totalLeaves || 0) + (employeeLeave.carryForwardLeaves || 0);
+      const remaining = totalAvailable - (employeeLeave.usedLeaves || 0);
+
+      if (totalDays > remaining) {
+        return res.status(400).json({
+          message: `Insufficient leave balance. Available: ${remaining}, Requested: ${totalDays}`
+        });
+      }
     }
 
-    const totalAvailable = (employeeLeave.totalLeaves || 0) + (employeeLeave.carryForwardLeaves || 0);
-    const remaining = totalAvailable - (employeeLeave.usedLeaves || 0);
-
-    if (totalDays > remaining) {
-      return res.status(400).json({ 
-        message: `Insufficient leave balance. Available: ${remaining}, Requested: ${totalDays}` 
-      });
-    }
-
-    // Get user role to determine approval flow
+    // Determine status
     const user = await User.findById(employeeId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // If HOD, send directly to director
     const status = user.role === "hod" ? "pending_director" : "pending_hod";
 
-    // Get periods if user is teaching staff or HOD (HODs can also be teaching)
-    // For emergency leave, period adjustments are optional
+    // Get periods for teaching staff or HOD
     let periods = [];
     if ((user.role === "teaching" || user.role === "hod") && (!periodAdjustments || periodAdjustments.length === 0)) {
       periods = await getPeriodsForDateRange(employeeId, startDate, endDate);
@@ -130,41 +124,33 @@ exports.applyLeaveRequest = async (req, res) => {
       periods = periodAdjustments;
     }
 
-    // Validate substitute faculty availability if period adjustments are provided
-    if (periods && periods.length > 0) {
-      for (const period of periods) {
-        if (period.substituteFacultyId) {
-          // Check if substitute has approved leave on this date
-          const substituteLeave = await LeaveRequest.findOne({
-            employeeId: period.substituteFacultyId,
-            status: "approved",
-            startDate: { $lte: moment(period.date).toDate() },
-            endDate: { $gte: moment(period.date).toDate() }
+    // Validate substitute availability
+    for (const period of periods) {
+      if (period.substituteFacultyId) {
+        const substituteLeave = await LeaveRequest.findOne({
+          employeeId: period.substituteFacultyId,
+          status: "approved",
+          startDate: { $lte: moment(period.date).toDate() },
+          endDate: { $gte: moment(period.date).toDate() }
+        });
+        if (substituteLeave) {
+          const substitute = await User.findById(period.substituteFacultyId);
+          return res.status(400).json({
+            message: `Substitute faculty ${substitute?.name || "Selected"} is on leave on ${moment(period.date).format("MMM D, YYYY")}.`
           });
-
-          if (substituteLeave) {
-            const substitute = await User.findById(period.substituteFacultyId);
-            return res.status(400).json({
-              message: `Substitute faculty ${substitute?.name || "Selected"} is on leave on ${moment(period.date).format("MMM D, YYYY")}. Please select another substitute.`
-            });
-          }
         }
       }
     }
 
-    // Convert date strings to Date objects for period adjustments
-    // For emergency leave, allow periods without substitutes (status: "not_required")
+    // Format period adjustments
     const formattedPeriodAdjustments = periods.map(period => {
       let status = "pending";
-      if (period.substituteFacultyId) {
-        status = "adjusted";
-      } else if (isEmergencyLeave) {
-        status = "not_required";
-      }
-      
+      if (period.substituteFacultyId) status = "adjusted";
+      else if (description.toLowerCase().includes("emergency")) status = "not_required";
+
       return {
         ...period,
-        date: moment(period.date).toDate(), // Convert string to Date
+        date: moment(period.date).toDate(),
         departmentId: period.departmentId,
         subjectId: period.subjectId,
         substituteFacultyId: period.substituteFacultyId || null,
@@ -186,49 +172,139 @@ exports.applyLeaveRequest = async (req, res) => {
 
     await leaveRequest.save();
 
-    // Create notifications
+    // Notifications (HOD / Director / Employee)
     if (user.role === "hod") {
-      // HOD requests go directly to director
       const directors = await User.find({ role: "director" });
       for (const director of directors) {
-        await createNotification(
-          director._id,
-          leaveRequest._id,
-          "leave_requested",
-          "New Leave Request",
-          `${user.name} has applied for ${totalDays} day(s) leave`
-        );
+        await createNotification(director._id, leaveRequest._id, "leave_requested", "New Leave Request", `${user.name} has applied for ${totalDays} day(s) leave`);
       }
     } else {
-      // Regular employees go to HOD first
-      const hod = await User.findOne({ 
-        role: "hod", 
-        departmentType: user.departmentType 
-      });
-      if (hod) {
-        await createNotification(
-          hod._id,
-          leaveRequest._id,
-          "leave_requested",
-          "New Leave Request",
-          `${user.name} has applied for ${totalDays} day(s) leave`
-        );
+      const hod = await User.findOne({ role: "hod", departmentType: user.departmentType });
+      if (hod) await createNotification(hod._id, leaveRequest._id, "leave_requested", "New Leave Request", `${user.name} has applied for ${totalDays} day(s) leave`);
+    }
+
+    await createNotification(employeeId, leaveRequest._id, "leave_requested", "Leave Request Submitted", `Your leave request for ${totalDays} day(s) has been submitted successfully`);
+
+    res.status(201).json({ message: "Leave request submitted successfully", leaveRequest });
+
+  } catch (error) {
+    console.error("Error applying leave request:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+exports.applyLeaveRequest = async (req, res) => {
+  try {
+    const { employeeId, leaveTypeId, startDate, endDate, description, periodAdjustments } = req.body;
+
+    if (!employeeId || !leaveTypeId || !startDate || !endDate || !description) {
+      return res.status(400).json({ message: "All required fields must be provided" });
+    }
+
+    // Validate dates
+    const start = moment(startDate);
+    const end = moment(endDate);
+    if (end.isBefore(start)) {
+      return res.status(400).json({ message: "End date must be after start date" });
+    }
+
+    const totalDays = end.diff(start, "days") + 1;
+
+    // Check leave type
+    const leaveType = await LeaveType.findById(leaveTypeId);
+    if (!leaveType) return res.status(404).json({ message: "Leave type not found" });
+
+    // Fetch employee leave allocation
+    const employeeLeave = await EmployeeLeave.findOne({ employeeId, leaveTypeId });
+    if (!employeeLeave) return res.status(400).json({ message: "Leave type not allocated to this employee" });
+
+    // For DEDUCT type, check leave balance
+    if (leaveType.leaveAction === "DEDUCT") {
+      const totalAvailable = (employeeLeave.totalLeaves || 0) + (employeeLeave.carryForwardLeaves || 0);
+      const remaining = totalAvailable - (employeeLeave.usedLeaves || 0);
+
+      if (totalDays > remaining) {
+        return res.status(400).json({
+          message: `Insufficient leave balance. Available: ${remaining}, Requested: ${totalDays}`
+        });
       }
     }
 
-    // Notify employee
-    await createNotification(
-      employeeId,
-      leaveRequest._id,
-      "leave_requested",
-      "Leave Request Submitted",
-      `Your leave request for ${totalDays} day(s) has been submitted successfully`
-    );
+    // Determine status
+    const user = await User.findById(employeeId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    res.status(201).json({
-      message: "Leave request submitted successfully",
-      leaveRequest
+    const status = user.role === "hod" ? "pending_director" : "pending_hod";
+
+    // Get periods for teaching staff or HOD
+    let periods = [];
+    if ((user.role === "teaching" || user.role === "hod") && (!periodAdjustments || periodAdjustments.length === 0)) {
+      periods = await getPeriodsForDateRange(employeeId, startDate, endDate);
+    } else if (periodAdjustments && periodAdjustments.length > 0) {
+      periods = periodAdjustments;
+    }
+
+    // Validate substitute availability
+    for (const period of periods) {
+      if (period.substituteFacultyId) {
+        const substituteLeave = await LeaveRequest.findOne({
+          employeeId: period.substituteFacultyId,
+          status: "approved",
+          startDate: { $lte: moment(period.date).toDate() },
+          endDate: { $gte: moment(period.date).toDate() }
+        });
+        if (substituteLeave) {
+          const substitute = await User.findById(period.substituteFacultyId);
+          return res.status(400).json({
+            message: `Substitute faculty ${substitute?.name || "Selected"} is on leave on ${moment(period.date).format("MMM D, YYYY")}.`
+          });
+        }
+      }
+    }
+
+    // Format period adjustments
+    const formattedPeriodAdjustments = periods.map(period => {
+      let status = "pending";
+      if (period.substituteFacultyId) status = "adjusted";
+      else if (description.toLowerCase().includes("emergency")) status = "not_required";
+
+      return {
+        ...period,
+        date: moment(period.date).toDate(),
+        departmentId: period.departmentId,
+        subjectId: period.subjectId,
+        substituteFacultyId: period.substituteFacultyId || null,
+        status
+      };
     });
+
+    // Create leave request
+    const leaveRequest = new LeaveRequest({
+      employeeId,
+      leaveTypeId,
+      startDate,
+      endDate,
+      totalDays,
+      description,
+      periodAdjustments: formattedPeriodAdjustments,
+      status
+    });
+
+    await leaveRequest.save();
+
+    // Notifications (HOD / Director / Employee)
+    if (user.role === "hod") {
+      const directors = await User.find({ role: "director" });
+      for (const director of directors) {
+        await createNotification(director._id, leaveRequest._id, "leave_requested", "New Leave Request", `${user.name} has applied for ${totalDays} day(s) leave`);
+      }
+    } else {
+      const hod = await User.findOne({ role: "hod", departmentType: user.departmentType });
+      if (hod) await createNotification(hod._id, leaveRequest._id, "leave_requested", "New Leave Request", `${user.name} has applied for ${totalDays} day(s) leave`);
+    }
+
+    await createNotification(employeeId, leaveRequest._id, "leave_requested", "Leave Request Submitted", `Your leave request for ${totalDays} day(s) has been submitted successfully`);
+
+    res.status(201).json({ message: "Leave request submitted successfully", leaveRequest });
 
   } catch (error) {
     console.error("Error applying leave request:", error);
@@ -312,240 +388,626 @@ exports.getPeriodsForDateRange = async (req, res) => {
 // =============================
 //  HOD APPROVE/REJECT
 // =============================
+// exports.hodApproveReject = async (req, res) => {
+//   try {
+//     const { leaveRequestId } = req.params;
+//     const { action, comments, hodId } = req.body; // action: "approve" or "reject"
+
+//     if (!action || !["approve", "reject"].includes(action)) {
+//       return res.status(400).json({ message: "Invalid action. Use 'approve' or 'reject'" });
+//     }
+
+//     const leaveRequest = await LeaveRequest.findById(leaveRequestId)
+//       .populate("employeeId", "name email role departmentType");
+
+//     if (!leaveRequest) {
+//       return res.status(404).json({ message: "Leave request not found" });
+//     }
+
+//     if (leaveRequest.status !== "pending_hod") {
+//       return res.status(400).json({ message: "Leave request is not pending HOD approval" });
+//     }
+
+//     // Check if leave request is for upcoming days only
+//     const today = moment().startOf("day");
+//     const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
+    
+//     if (leaveStartDate.isBefore(today)) {
+//       return res.status(400).json({ 
+//         message: "Cannot approve/reject leave requests that have already started. You can only approve/reject leaves for upcoming days." 
+//       });
+//     }
+
+//     const hod = await User.findById(hodId);
+//     if (!hod || hod.role !== "hod") {
+//       return res.status(403).json({ message: "Unauthorized. Only HOD can approve/reject" });
+//     }
+
+//     if (action === "approve") {
+//       leaveRequest.status = "pending_director";
+//       leaveRequest.hodApproval = {
+//         approvedBy: hodId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       // Notify director
+//       const directors = await User.find({ role: "director" });
+//       for (const director of directors) {
+//         await createNotification(
+//           director._id,
+//           leaveRequest._id,
+//           "leave_approved_hod",
+//           "Leave Request Approved by HOD",
+//           `${leaveRequest.employeeId.name}'s leave request has been approved by HOD and needs your approval`
+//         );
+//       }
+
+//       // Notify employee
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_approved_hod",
+//         "Leave Request Approved by HOD",
+//         `Your leave request has been approved by HOD and forwarded to Director`
+//       );
+
+//     } else {
+//       leaveRequest.status = "rejected_by_hod";
+//       leaveRequest.hodApproval = {
+//         approvedBy: hodId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       // Notify employee
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_rejected_hod",
+//         "Leave Request Rejected",
+//         `Your leave request has been rejected by HOD. ${comments ? "Reason: " + comments : ""}`
+//       );
+//     }
+
+//     await leaveRequest.save();
+
+//     res.json({
+//       message: `Leave request ${action === "approve" ? "approved" : "rejected"} successfully`,
+//       leaveRequest
+//     });
+
+//   } catch (error) {
+//     console.error("Error in HOD approval:", error);
+//     res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
 exports.hodApproveReject = async (req, res) => {
   try {
     const { leaveRequestId } = req.params;
-    const { action, comments, hodId } = req.body; // action: "approve" or "reject"
+    const { action, comments, hodId } = req.body;
 
-    if (!action || !["approve", "reject"].includes(action)) {
-      return res.status(400).json({ message: "Invalid action. Use 'approve' or 'reject'" });
+    if (!["approve", "reject"].includes(action)) {
+      return res.status(400).json({ message: "Invalid action" });
     }
 
-    const leaveRequest = await LeaveRequest.findById(leaveRequestId)
-      .populate("employeeId", "name email role departmentType");
-
-    if (!leaveRequest) {
-      return res.status(404).json({ message: "Leave request not found" });
-    }
-
-    if (leaveRequest.status !== "pending_hod") {
-      return res.status(400).json({ message: "Leave request is not pending HOD approval" });
-    }
-
-    // Check if leave request is for upcoming days only
-    const today = moment().startOf("day");
-    const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
-    
-    if (leaveStartDate.isBefore(today)) {
-      return res.status(400).json({ 
-        message: "Cannot approve/reject leave requests that have already started. You can only approve/reject leaves for upcoming days." 
-      });
-    }
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate("employeeId", "name email role departmentType");
+    if (!leaveRequest) return res.status(404).json({ message: "Leave request not found" });
+    if (leaveRequest.status !== "pending_hod") return res.status(400).json({ message: "Leave not pending HOD approval" });
 
     const hod = await User.findById(hodId);
-    if (!hod || hod.role !== "hod") {
-      return res.status(403).json({ message: "Unauthorized. Only HOD can approve/reject" });
-    }
+    if (!hod || hod.role !== "hod") return res.status(403).json({ message: "Only HOD can approve/reject leave at this stage" });
+
+    const leaveType = await LeaveType.findById(leaveRequest.leaveTypeId);
 
     if (action === "approve") {
-      leaveRequest.status = "pending_director";
-      leaveRequest.hodApproval = {
-        approvedBy: hodId,
-        approvedAt: new Date(),
-        comments: comments || ""
-      };
-
-      // Notify director
-      const directors = await User.find({ role: "director" });
-      for (const director of directors) {
-        await createNotification(
-          director._id,
-          leaveRequest._id,
-          "leave_approved_hod",
-          "Leave Request Approved by HOD",
-          `${leaveRequest.employeeId.name}'s leave request has been approved by HOD and needs your approval`
-        );
+      // Determine next status
+      if (leaveRequest.employeeId.role === "hod") {
+        leaveRequest.status = "pending_director";
+      } else {
+        leaveRequest.status = "approved"; // non-HOD leave is approved at HOD level
       }
 
-      // Notify employee
-      await createNotification(
-        leaveRequest.employeeId._id,
-        leaveRequest._id,
-        "leave_approved_hod",
-        "Leave Request Approved by HOD",
-        `Your leave request has been approved by HOD and forwarded to Director`
-      );
+      leaveRequest.hodApproval = { approvedBy: hodId, approvedAt: new Date(), comments: comments || "" };
 
-    } else {
-      leaveRequest.status = "rejected_by_hod";
-      leaveRequest.hodApproval = {
-        approvedBy: hodId,
-        approvedAt: new Date(),
-        comments: comments || ""
-      };
+      // Update leave balance only if HOD is final approver
+      if (leaveRequest.status === "approved") {
+        const empLeave = await EmployeeLeave.findOne({ employeeId: leaveRequest.employeeId._id, leaveTypeId: leaveRequest.leaveTypeId });
+        if (empLeave) {
+          if (leaveType.leaveAction === "DEDUCT") {
+            empLeave.usedLeaves = (empLeave.usedLeaves || 0) + leaveRequest.totalDays;
+          } else if (leaveType.leaveAction === "ADD") {
+            empLeave.totalLeaves = (empLeave.totalLeaves || 0) + leaveRequest.totalDays;
+          }
+          await empLeave.save();
+        }
 
-      // Notify employee
-      await createNotification(
-        leaveRequest.employeeId._id,
-        leaveRequest._id,
-        "leave_rejected_hod",
-        "Leave Request Rejected",
-        `Your leave request has been rejected by HOD. ${comments ? "Reason: " + comments : ""}`
-      );
+        // Apply period adjustments & notify substitutes
+        if (leaveRequest.periodAdjustments.length > 0) {
+          for (const adj of leaveRequest.periodAdjustments) {
+            if (!adj.substituteFacultyId) continue;
+
+            const date = moment(adj.date).format("dddd");
+            const timetable = await Timetable.findOne({ departmentType: adj.departmentId, className: adj.className });
+            if (timetable) {
+              const idx = timetable.timetable.findIndex(p => p.day === date && p.period === adj.period);
+              if (idx !== -1) {
+                timetable.timetable[idx].faculty = adj.substituteFacultyId;
+                await timetable.save();
+              }
+            }
+
+            await createNotification(
+              adj.substituteFacultyId,
+              leaveRequest._id,
+              "substitute_assignment",
+              "Substitute Allocation",
+              `You are assigned to class on ${moment(adj.date).format("DD MMM YYYY")} for period ${adj.period} since ${leaveRequest.employeeId.name} is on leave.`
+            );
+            adj.notificationStatus = "sent";
+          }
+          leaveRequest.markModified("periodAdjustments");
+        }
+
+        await createNotification(
+          leaveRequest.employeeId._id,
+          leaveRequest._id,
+          "leave_approved",
+          "Leave Approved",
+          "Your leave request has been approved by HOD."
+        );
+      } else {
+        // If HOD is not final approver, notify director
+        const directors = await User.find({ role: "director" });
+        for (const director of directors) {
+          await createNotification(
+            director._id,
+            leaveRequest._id,
+            "leave_requested",
+            "New Leave Request Pending Director",
+            `Leave request by ${leaveRequest.employeeId.name} requires your approval.`
+          );
+        }
+      }
+
+      await leaveRequest.save();
+      return res.json({ message: "Leave approved successfully", leaveRequest });
     }
 
+    // REJECT
+    leaveRequest.status = "rejected_by_hod";
+    leaveRequest.hodApproval = { approvedBy: hodId, approvedAt: new Date(), comments: comments || "" };
+    await createNotification(
+      leaveRequest.employeeId._id,
+      leaveRequest._id,
+      "leave_rejected",
+      "Leave Rejected",
+      "Your leave request has been rejected by HOD."
+    );
     await leaveRequest.save();
 
-    res.json({
-      message: `Leave request ${action === "approve" ? "approved" : "rejected"} successfully`,
-      leaveRequest
-    });
+    res.json({ message: "Leave rejected", leaveRequest });
 
   } catch (error) {
-    console.error("Error in HOD approval:", error);
+    console.error("HOD approval error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
+
 // =============================
 //  DIRECTOR APPROVE/REJECT
+// =============================
+// exports.directorApproveReject = async (req, res) => {
+//   try {
+//     const { leaveRequestId } = req.params;
+//     const { action, comments, directorId } = req.body;
+
+//     if (!action || !["approve", "reject"].includes(action)) {
+//       return res.status(400).json({ message: "Invalid action. Use 'approve' or 'reject'" });
+//     }
+
+//     const leaveRequest = await LeaveRequest.findById(leaveRequestId)
+//       .populate("employeeId", "name email");
+
+//     if (!leaveRequest) {
+//       return res.status(404).json({ message: "Leave request not found" });
+//     }
+
+//     if (!["pending_director"].includes(leaveRequest.status)) {
+//       return res.status(400).json({ message: "Leave request is not pending director approval" });
+//     }
+
+//     // For APPROVAL: Director can approve only before the day of the leave start
+//     const today = moment().startOf("day");
+//     const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
+
+//     if (action === "approve" && !leaveStartDate.isAfter(today)) {
+//       return res.status(400).json({
+//         message: "Director can approve leave only before the day of the leave start (at least 1 day in advance)."
+//       });
+//     }
+
+//     if (!directorId) {
+//       return res.status(403).json({ message: "Director id is missing in request." });
+//     }
+
+//     const director = await User.findById(directorId);
+//     if (!director || director.role !== "director") {
+//       return res.status(403).json({ message: "Unauthorized. Only Director can approve/reject" });
+//     }
+
+//     if (action === "approve") {
+//       leaveRequest.status = "approved";
+//       leaveRequest.directorApproval = {
+//         approvedBy: directorId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       // Update employee leave balance
+//       const employeeLeave = await EmployeeLeave.findOne({
+//         employeeId: leaveRequest.employeeId._id,
+//         leaveTypeId: leaveRequest.leaveTypeId
+//       });
+
+//       if (employeeLeave) {
+//         employeeLeave.usedLeaves = (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
+//         await employeeLeave.save();
+//       }
+
+//       // Apply period adjustments if any
+//       if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
+//         for (const adjustment of leaveRequest.periodAdjustments) {
+//           // Skip invalid adjustment records safely
+//           if (!adjustment.substituteFacultyId || !adjustment.departmentId || !adjustment.className) {
+//             continue;
+//           }
+
+//           try {
+//             const date = moment(adjustment.date);
+//             const dayName = date.format("dddd");
+
+//             // Find timetable and update period
+//             const timetable = await Timetable.findOne({
+//               departmentType: adjustment.departmentId,
+//               className: adjustment.className
+//             });
+
+//             if (timetable) {
+//               const periodIndex = timetable.timetable.findIndex(
+//                 p => p.day === dayName && p.period === adjustment.period
+//               );
+
+//               if (periodIndex !== -1) {
+//                 timetable.timetable[periodIndex].faculty = adjustment.substituteFacultyId;
+//                 await timetable.save();
+//               }
+//             }
+//           } catch (innerErr) {
+//             // Log and continue with other adjustments instead of failing whole approval
+//             console.error("Error applying period adjustment in director approval:", innerErr);
+//           }
+//         }
+//       }
+//       // Notify substitute faculty members
+// if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
+//   for (const adjustment of leaveRequest.periodAdjustments) {
+
+//     if (!adjustment.substituteFacultyId) continue;
+
+//     try {
+//       await createNotification(
+//         adjustment.substituteFacultyId,
+//         leaveRequest._id,
+//         "substitute_assignment",
+//         "Substitute Class Assigned",
+//         `You are assigned to take class of ${leaveRequest.employeeId.name} on 
+//         ${moment(adjustment.date).format("DD MMM YYYY")} for period ${adjustment.period}.`
+//       );
+
+//       adjustment.notificationStatus = "sent";
+
+//     } catch (notifyErr) {
+//       console.error("Error sending substitute notification:", notifyErr);
+//     }
+//   }
+// }
+
+
+//       // Notify employee
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_approved",
+//         "Leave Request Approved",
+//         `Your leave request has been approved by Director`
+//       );
+
+//     } else {
+//       leaveRequest.status = "rejected_by_director";
+//       leaveRequest.directorApproval = {
+//         approvedBy: directorId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       // Notify employee
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_rejected",
+//         "Leave Request Rejected",
+//         `Your leave request has been rejected by Director. ${comments ? "Reason: " + comments : ""}`
+//       );
+//     }
+
+//     await leaveRequest.save();
+
+//     res.json({
+//       message: `Leave request ${action === "approve" ? "approved" : "rejected"} successfully`,
+//       leaveRequest
+//     });
+
+//   } catch (error) {
+//     console.error("Error in Director approval:", error);
+//     res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+// async function createNotification(userId, leaveRequestId, type, title, message) {
+//   return await Notification.create({
+//     userId,
+//     leaveRequestId,
+//     type,
+//     title,
+//     message,
+//   });
+
+// exports.directorApproveReject = async (req, res) => {
+
+//   try {
+//     const { leaveRequestId } = req.params;
+//     const { action, comments, directorId } = req.body;
+
+//     if (!action || !["approve", "reject"].includes(action)) {
+//       return res.status(400).json({ message: "Invalid action. Use 'approve' or 'reject'" });
+//     }
+
+//     const leaveRequest = await LeaveRequest.findById(leaveRequestId)
+//       .populate("employeeId", "name email");
+
+//     if (!leaveRequest) {
+//       return res.status(404).json({ message: "Leave request not found" });
+//     }
+
+//     if (!["pending_director"].includes(leaveRequest.status)) {
+//       return res.status(400).json({ message: "Leave request is not pending director approval" });
+//     }
+
+//     const today = moment().startOf("day");
+//     const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
+
+//     if (action === "approve" && !leaveStartDate.isAfter(today)) {
+//       return res.status(400).json({
+//         message: "Director must approve at least 1 day before leave start"
+//       });
+//     }
+
+//     if (!directorId) {
+//       return res.status(403).json({ message: "Director ID missing" });
+//     }
+
+//     const director = await User.findById(directorId);
+//     if (!director || director.role !== "director") {
+//       return res.status(403).json({ message: "Unauthorized Director access" });
+//     }
+
+//     // ==========================================================
+//     //  APPROVAL BLOCK
+//     // ==========================================================
+//     if (action === "approve") {
+//       leaveRequest.status = "approved";
+//       leaveRequest.directorApproval = {
+//         approvedBy: directorId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       // update leave balance
+//       const employeeLeave = await EmployeeLeave.findOne({
+//         employeeId: leaveRequest.employeeId._id,
+//         leaveTypeId: leaveRequest.leaveTypeId
+//       });
+
+//       if (employeeLeave) {
+//         employeeLeave.usedLeaves = (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
+//         await employeeLeave.save();
+//       }
+
+//       // =============================
+//       // Apply period adjustments
+//       // =============================
+//       if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
+//         for (const adjustment of leaveRequest.periodAdjustments) {
+
+//           if (!adjustment.substituteFacultyId || !adjustment.departmentId || !adjustment.className) {
+//             continue;
+//           }
+
+//           try {
+//             const date = moment(adjustment.date);
+//             const dayName = date.format("dddd");
+
+//             const timetable = await Timetable.findOne({
+//               departmentType: adjustment.departmentId,
+//               className: adjustment.className
+//             });
+
+//             if (timetable) {
+//               const periodIndex = timetable.timetable.findIndex(
+//                 p => p.day === dayName && p.period === adjustment.period
+//               );
+
+//               if (periodIndex !== -1) {
+//                 timetable.timetable[periodIndex].faculty = adjustment.substituteFacultyId;
+//                 await timetable.save();
+//               }
+//             }
+
+//           } catch (err) {
+//             console.error("Error updating timetable:", err);
+//           }
+//         }
+//       }
+
+//       // =============================
+//       // SUBSTITUTE NOTIFY BLOCK
+//       // =============================
+//       if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
+//         for (const adjustment of leaveRequest.periodAdjustments) {
+
+//           if (!adjustment.substituteFacultyId) continue;
+
+//           try {
+//             await createNotification(
+//               adjustment.substituteFacultyId,
+//               leaveRequest._id,
+//               "substitute_assignment",
+//               "Substitute Class Assigned",
+//               `You are assigned to take class of ${leaveRequest.employeeId.name}
+//               on ${moment(adjustment.date).format("DD MMM YYYY")} for Period ${adjustment.period}.`
+//             );
+
+//             adjustment.notificationStatus = "sent"; // <-- tracked
+
+//           } catch (notifyErr) {
+//             console.error("Error sending notification:", notifyErr);
+//           }
+//         }
+
+//         // VERY IMPORTANT
+//         leaveRequest.markModified("periodAdjustments");
+//         await leaveRequest.save();
+//       }
+
+//       // =============================
+//       // NOTIFY EMPLOYEE
+//       // =============================
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_approved",
+//         "Leave Request Approved",
+//         `Your leave request has been approved by the Director`
+//       );
+
+//     }
+
+//     // ==========================================================
+//     //  REJECT BLOCK
+//     // ==========================================================
+//     else {
+//       leaveRequest.status = "rejected_by_director";
+//       leaveRequest.directorApproval = {
+//         approvedBy: directorId,
+//         approvedAt: new Date(),
+//         comments: comments || ""
+//       };
+
+//       await createNotification(
+//         leaveRequest.employeeId._id,
+//         leaveRequest._id,
+//         "leave_rejected",
+//         "Leave Request Rejected",
+//         `Director rejected leave request. ${comments ? "Reason: " + comments : ""}`
+//       );
+//     }
+
+//     await leaveRequest.save();
+
+//     res.json({
+//       message: `Leave ${action === "approve" ? "approved" : "rejected"} successfully`,
+//       leaveRequest
+//     });
+
+//   } catch (error) {
+//     console.error("Director approval error:", error);
+//     res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// =============================
+//  GET PENDING REQUESTS FOR HOD
 // =============================
 exports.directorApproveReject = async (req, res) => {
   try {
     const { leaveRequestId } = req.params;
     const { action, comments, directorId } = req.body;
 
-    if (!action || !["approve", "reject"].includes(action)) {
-      return res.status(400).json({ message: "Invalid action. Use 'approve' or 'reject'" });
-    }
+    if (!["approve", "reject"].includes(action)) return res.status(400).json({ message: "Invalid action" });
 
-    const leaveRequest = await LeaveRequest.findById(leaveRequestId)
-      .populate("employeeId", "name email");
-
-    if (!leaveRequest) {
-      return res.status(404).json({ message: "Leave request not found" });
-    }
-
-    if (!["pending_director"].includes(leaveRequest.status)) {
-      return res.status(400).json({ message: "Leave request is not pending director approval" });
-    }
-
-    // For APPROVAL: Director can approve only before the day of the leave start
-    const today = moment().startOf("day");
-    const leaveStartDate = moment(leaveRequest.startDate).startOf("day");
-
-    if (action === "approve" && !leaveStartDate.isAfter(today)) {
-      return res.status(400).json({
-        message: "Director can approve leave only before the day of the leave start (at least 1 day in advance)."
-      });
-    }
-
-    if (!directorId) {
-      return res.status(403).json({ message: "Director id is missing in request." });
-    }
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate("employeeId", "name email");
+    if (!leaveRequest) return res.status(404).json({ message: "Leave request not found" });
+    if (leaveRequest.status !== "pending_director") return res.status(400).json({ message: "Leave not pending director approval" });
 
     const director = await User.findById(directorId);
-    if (!director || director.role !== "director") {
-      return res.status(403).json({ message: "Unauthorized. Only Director can approve/reject" });
-    }
+    if (!director || director.role !== "director") return res.status(403).json({ message: "Only director allowed" });
+
+    const leaveType = await LeaveType.findById(leaveRequest.leaveTypeId);
 
     if (action === "approve") {
       leaveRequest.status = "approved";
-      leaveRequest.directorApproval = {
-        approvedBy: directorId,
-        approvedAt: new Date(),
-        comments: comments || ""
-      };
+      leaveRequest.directorApproval = { approvedBy: directorId, approvedAt: new Date(), comments: comments || "" };
 
-      // Update employee leave balance
-      const employeeLeave = await EmployeeLeave.findOne({
-        employeeId: leaveRequest.employeeId._id,
-        leaveTypeId: leaveRequest.leaveTypeId
-      });
-
-      if (employeeLeave) {
-        employeeLeave.usedLeaves = (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
-        await employeeLeave.save();
+      // Update leave balance
+      const empLeave = await EmployeeLeave.findOne({ employeeId: leaveRequest.employeeId._id, leaveTypeId: leaveRequest.leaveTypeId });
+      if (empLeave) {
+        if (leaveType.leaveAction === "DEDUCT") empLeave.usedLeaves = (empLeave.usedLeaves || 0) + leaveRequest.totalDays;
+        else if (leaveType.leaveAction === "ADD") empLeave.totalLeaves = (empLeave.totalLeaves || 0) + leaveRequest.totalDays;
+        await empLeave.save();
       }
 
-      // Apply period adjustments if any
-      if (leaveRequest.periodAdjustments && leaveRequest.periodAdjustments.length > 0) {
-        for (const adjustment of leaveRequest.periodAdjustments) {
-          // Skip invalid adjustment records safely
-          if (!adjustment.substituteFacultyId || !adjustment.departmentId || !adjustment.className) {
-            continue;
+      // Apply period adjustments & notify substitutes
+      if (leaveRequest.periodAdjustments.length > 0) {
+        for (const adj of leaveRequest.periodAdjustments) {
+          if (!adj.substituteFacultyId) continue;
+
+          const date = moment(adj.date).format("dddd");
+          const timetable = await Timetable.findOne({ departmentType: adj.departmentId, className: adj.className });
+          if (timetable) {
+            const idx = timetable.timetable.findIndex(p => p.day === date && p.period === adj.period);
+            if (idx !== -1) { timetable.timetable[idx].faculty = adj.substituteFacultyId; await timetable.save(); }
           }
 
-          try {
-            const date = moment(adjustment.date);
-            const dayName = date.format("dddd");
-
-            // Find timetable and update period
-            const timetable = await Timetable.findOne({
-              departmentType: adjustment.departmentId,
-              className: adjustment.className
-            });
-
-            if (timetable) {
-              const periodIndex = timetable.timetable.findIndex(
-                p => p.day === dayName && p.period === adjustment.period
-              );
-
-              if (periodIndex !== -1) {
-                timetable.timetable[periodIndex].faculty = adjustment.substituteFacultyId;
-                await timetable.save();
-              }
-            }
-          } catch (innerErr) {
-            // Log and continue with other adjustments instead of failing whole approval
-            console.error("Error applying period adjustment in director approval:", innerErr);
-          }
+          await createNotification(adj.substituteFacultyId, leaveRequest._id, "substitute_assignment", "Substitute Allocation", `You are assigned to class on ${moment(adj.date).format("DD MMM YYYY")} for period ${adj.period} since ${leaveRequest.employeeId.name} is on leave.`);
+          adj.notificationStatus = "sent";
         }
+        leaveRequest.markModified("periodAdjustments");
       }
 
-      // Notify employee
-      await createNotification(
-        leaveRequest.employeeId._id,
-        leaveRequest._id,
-        "leave_approved",
-        "Leave Request Approved",
-        `Your leave request has been approved by Director`
-      );
+      await createNotification(leaveRequest.employeeId._id, leaveRequest._id, "leave_approved", "Leave Approved", "Director approved your leave request.");
+      await leaveRequest.save();
 
-    } else {
-      leaveRequest.status = "rejected_by_director";
-      leaveRequest.directorApproval = {
-        approvedBy: directorId,
-        approvedAt: new Date(),
-        comments: comments || ""
-      };
-
-      // Notify employee
-      await createNotification(
-        leaveRequest.employeeId._id,
-        leaveRequest._id,
-        "leave_rejected",
-        "Leave Request Rejected",
-        `Your leave request has been rejected by Director. ${comments ? "Reason: " + comments : ""}`
-      );
+      return res.json({ message: "Leave approved", leaveRequest });
     }
 
+    // REJECT
+    leaveRequest.status = "rejected_by_director";
+    leaveRequest.directorApproval = { approvedBy: directorId, approvedAt: new Date(), comments: comments || "" };
+    await createNotification(leaveRequest.employeeId._id, leaveRequest._id, "leave_rejected", "Leave Rejected", `Director rejected leave request.`);
     await leaveRequest.save();
 
-    res.json({
-      message: `Leave request ${action === "approve" ? "approved" : "rejected"} successfully`,
-      leaveRequest
-    });
+    res.json({ message: "Leave rejected", leaveRequest });
 
   } catch (error) {
-    console.error("Error in Director approval:", error);
+    console.error("Director approval error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// =============================
-//  GET PENDING REQUESTS FOR HOD
-// =============================
+
+
 exports.getHodPendingRequests = async (req, res) => {
   try {
     const { hodId } = req.params;
@@ -1046,3 +1508,42 @@ exports.getDepartmentLeaveAnalytics = async (req, res) => {
   }
 };
 
+// =============================
+//  GET ALL REQUESTS FOR DIRECTOR (History + Pending)
+// =============================
+exports.getDirectorAllRequests = async (req, res) => {
+  try {
+    const { directorId } = req.params;
+
+    const director = await User.findById(directorId);
+    if (!director || director.role !== "director") {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const leaveRequests = await LeaveRequest.find({
+      $or: [
+        { status: "pending_director" },
+        { status: "approved" },
+        { status: "rejected_by_director" }
+      ]
+    })
+      .populate({
+        path: "employeeId",
+        select: "name email role",
+        populate: {
+          path: "departmentType",
+          select: "departmentName"
+        }
+      })
+      .populate("leaveTypeId", "name")
+      .populate("hodApproval.approvedBy", "name")
+      .populate("directorApproval.approvedBy", "name")
+      .populate("periodAdjustments.substituteFacultyId", "name email")
+      .sort({ createdAt: -1 });
+
+    res.json(leaveRequests);
+  } catch (error) {
+    console.error("Error fetching Director all requests:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

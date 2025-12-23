@@ -5,6 +5,7 @@ import moment from "moment";
 function ViewDepartmentLeaves() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
   const hodId = user._id || user.id;
+  console.log("HOD ID:", hodId);
 
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);

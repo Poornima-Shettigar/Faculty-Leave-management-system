@@ -10,29 +10,30 @@ function ApproveLeave() {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [comments, setComments] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [filter, setFilter] = useState("all");
 
   useEffect(() => {
-    loadPendingRequests();
+    if (directorId) loadAllRequests();
   }, [directorId]);
 
-  const loadPendingRequests = async () => {
+  const loadAllRequests = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(
-        `http://localhost:5000/api/leave-request/director/pending/${directorId}`
-      );
+      const res = await axios.get(`http://localhost:5000/api/leave-request/director/all/${directorId}`);
       setLeaveRequests(res.data || []);
     } catch (err) {
-      console.error("Error loading pending requests:", err);
+      console.error("Error loading requests:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAction = async (requestId, action) => {
-    if (!confirm(`Are you sure you want to ${action} this leave request?`)) {
+    if (action === "reject" && !comments.trim()) {
+      alert("Please provide a reason for rejection.");
       return;
     }
+    if (!window.confirm(`Are you sure you want to ${action} this leave request?`)) return;
 
     try {
       setActionLoading(true);
@@ -44,266 +45,161 @@ function ApproveLeave() {
 
       setSelectedRequest(null);
       setComments("");
-      loadPendingRequests();
+      loadAllRequests();
       alert(`Leave request ${action === "approve" ? "approved" : "rejected"} successfully`);
     } catch (err) {
-      console.error("Error processing request:", err);
       alert(err.response?.data?.message || "Failed to process request");
     } finally {
       setActionLoading(false);
     }
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
-    });
+  const getStatusBadge = (status) => {
+    const config = {
+      pending_director: { label: "PENDING", style: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+      approved: { label: "APPROVED", style: "bg-green-100 text-green-800 border-green-200" },
+      rejected_by_director: { label: "REJECTED", style: "bg-red-100 text-red-800 border-red-200" },
+    };
+    const current = config[status] || config.pending_director;
+    return (
+      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${current.style}`}>
+        {current.label}
+      </span>
+    );
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 text-center">
-        <div className="text-gray-500">Loading pending requests...</div>
-      </div>
-    );
-  }
+  const formatDate = (date) => date ? new Date(date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A";
+
+  const filteredRequests = leaveRequests.filter(req => {
+    if (filter === "all") return true;
+    if (filter === "pending") return req.status === "pending_director";
+    if (filter === "approved") return req.status === "approved";
+    if (filter === "rejected") return req.status === "rejected_by_director";
+    return true;
+  });
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading leave records...</div>;
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Approve Leave Requests</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <h1 className="text-3xl font-bold text-gray-900">Faculty Leave Management</h1>
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          {['all', 'pending', 'approved', 'rejected'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-md text-sm capitalize transition ${
+                filter === f ? "bg-white shadow-sm text-blue-600 font-bold" : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {leaveRequests.length === 0 ? (
-        <div className="bg-white shadow-lg rounded-xl p-8 border border-gray-200 text-center">
-          <p className="text-gray-500 text-lg">No pending leave requests.</p>
+      {filteredRequests.length === 0 ? (
+        <div className="bg-white shadow rounded-xl p-12 text-center border border-gray-100">
+          <p className="text-gray-400">No {filter !== 'all' ? filter : ''} leave requests found.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {leaveRequests.map((request) => (
-            <div
-              key={request._id}
-              className="bg-white shadow-lg rounded-xl border border-gray-200 p-6"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div>
-                  <div className="text-sm text-gray-600">Employee</div>
-                  <div className="font-semibold text-gray-900">
-                    {request.employeeId?.name || "N/A"}
+        <div className="grid gap-6">
+          {filteredRequests.map((request) => (
+            <div key={request._id} className="bg-white shadow-md rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{request.employeeId?.name}</h3>
+                    <p className="text-sm text-gray-500">
+                      {request.employeeId?.departmentType?.departmentName || "General"} • {request.leaveTypeId?.name}
+                    </p>
                   </div>
-                  <div className="text-sm text-gray-500">
-                    {request.employeeId?.email || ""}
-                  </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    Role: {request.employeeId?.role || "N/A"}
-                  </div>
+                  {getStatusBadge(request.status)}
                 </div>
-                <div>
-                  <div className="text-sm text-gray-600">Department</div>
-                  <div className="font-semibold text-gray-900">
-                    {request.employeeId?.departmentType?.departmentName || "N/A"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">Leave Type</div>
-                  <div className="font-semibold text-gray-900">
-                    {request.leaveTypeId?.name || "N/A"}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {request.totalDays} day(s)
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">Date Range</div>
-                  <div className="font-semibold text-gray-900">
-                    {formatDate(request.startDate)} - {formatDate(request.endDate)}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    Applied: {formatDate(request.createdAt)}
-                  </div>
-                </div>
-              </div>
 
-              {request.hodApproval?.approvedBy && (
-                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="text-sm font-medium text-green-800">
-                    ✓ Approved by HOD: {request.hodApproval.approvedBy?.name || "N/A"}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y border-gray-50 text-sm">
+                  <div>
+                    <p className="text-gray-400 uppercase text-[10px] font-bold">Duration</p>
+                    <p className="font-medium text-gray-900">{formatDate(request.startDate)} - {formatDate(request.endDate)}</p>
+                    <p className="text-blue-600 font-bold">{request.totalDays} Day(s)</p>
                   </div>
-                  {request.hodApproval.comments && (
-                    <div className="text-sm text-green-700 mt-1">
-                      Comments: {request.hodApproval.comments}
+
+                  {/* MODIFIED: Show HOD Name and Status instead of just Remark */}
+                  <div>
+                    <p className="text-gray-400 uppercase text-[10px] font-bold">HOD Recommendation</p>
+                    <p className="font-medium text-gray-900">{request.hodApproval?.approvedBy?.name || "N/A"}</p>
+                    <p className="text-green-600 text-[11px] font-bold flex items-center gap-1">
+                      <span className="text-lg">✓</span> Recommended
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-gray-400 uppercase text-[10px] font-bold">Applied On</p>
+                    <p className="font-medium text-gray-900">{formatDate(request.createdAt)}</p>
+                  </div>
+
+                  <div className="flex items-center">
+                    <button 
+                      onClick={() => setSelectedRequest(selectedRequest?._id === request._id ? null : request)}
+                      className="text-blue-600 hover:underline font-bold text-sm"
+                    >
+                      {selectedRequest?._id === request._id ? "Hide Details" : "View & Action"}
+                    </button>
+                  </div>
+                </div>
+
+                {selectedRequest?._id === request._id && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="grid md:grid-cols-2 gap-6 mb-4">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 mb-1 uppercase">Reason for Leave:</p>
+                        <p className="text-gray-700 bg-white p-3 rounded border border-gray-200 italic">"{request.description}"</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 mb-1 uppercase">HOD's Full Remark:</p>
+                        <p className="text-gray-700 bg-white p-3 rounded border border-gray-200">
+                          {request.hodApproval?.comments || "No specific comments provided by HOD."}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
 
-              <div className="mb-4">
-                <div className="text-sm text-gray-600 mb-1">Description</div>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
-                  {request.description}
-                </div>
-              </div>
-
-              {/* {request.periodAdjustments && request.periodAdjustments.length > 0 && (
-                <div className="mb-4">
-                  <div className="text-sm text-gray-600 mb-2">Period Adjustments</div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                    {request.periodAdjustments.length} period(s)  adjusted
+                    {request.status === "pending_director" ? (
+                      <div className="pt-4 border-t border-gray-200">
+                        <label className="block text-xs font-bold text-gray-500 mb-2 uppercase">Your Decision Remarks</label>
+                        <textarea
+                          value={comments}
+                          onChange={(e) => setComments(e.target.value)}
+                          className="w-full border rounded-lg p-3 text-sm mb-4 focus:ring-2 focus:ring-blue-500 bg-white"
+                          placeholder="Type approval or rejection reason here..."
+                          rows="2"
+                        />
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => handleAction(request._id, "approve")}
+                            disabled={actionLoading}
+                            className="bg-green-600 text-white px-8 py-2.5 rounded-lg text-sm font-bold hover:bg-green-700 transition shadow-sm"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleAction(request._id, "reject")}
+                            disabled={actionLoading}
+                            className="bg-red-600 text-white px-8 py-2.5 rounded-lg text-sm font-bold hover:bg-red-700 transition shadow-sm"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-4 border-t border-gray-200">
+                        <p className="text-xs font-bold text-gray-400 mb-1 uppercase">Your Final Remarks:</p>
+                        <p className="text-gray-900 font-medium">{request.directorApproval?.comments || "No remarks provided."}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )} */}
-              {/* {request.periodAdjustments && request.periodAdjustments.length > 0 && (
-  <div className="mb-4">
-    <div className="text-sm font-medium text-gray-700 mb-2">
-      Period Adjustment Status
-    </div>
-
-    <div className="space-y-2">
-      {request.periodAdjustments.map((pa, index) => {
-        let statusText = "Needed";
-        let statusColor = "text-red-700";
-        let bgColor = "bg-red-50 border-red-200";
-
-        if (pa.status === "adjusted") {
-          statusText = "Adjusted";
-          statusColor = "text-green-700";
-          bgColor = "bg-green-50 border-green-200";
-        } else if (pa.status === "not_required") {
-          statusText = "Not Required";
-          statusColor = "text-gray-700";
-          bgColor = "bg-gray-50 border-gray-200";
-        }
-
-        return (
-          <div
-            key={index}
-            className={`flex flex-col md:flex-row md:justify-between md:items-center gap-2 p-3 rounded-lg border text-sm ${bgColor}`}
-          >
-            <div className="text-gray-800">
-              <div className="font-semibold">
-                {formatDate(pa.date)} ({pa.day})
+                )}
               </div>
-              <div className="text-xs text-gray-600">
-                Period {pa.period} | {pa.className}
-              </div>
-            </div>
-
-            <div className={`font-semibold ${statusColor}`}>
-              {statusText}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </div>
-)} */}
-{request.periodAdjustments && request.periodAdjustments.length > 0 && (() => {
-  const totalPeriods = request.periodAdjustments.length;
-
-  const adjustedPeriods = request.periodAdjustments.filter(
-    pa => pa.status === "adjusted"
-  );
-
-  const adjustedCount = adjustedPeriods.length;
-
-  const adjustedWithFaculty = adjustedPeriods.filter(
-    pa => pa.substituteFacultyId
-  ).length;
-
-  const adjustedWithoutFaculty = adjustedCount - adjustedWithFaculty;
-
-  return (
-    <div className="mb-4">
-      <div className="text-sm font-medium text-gray-700 mb-2">
-        Period Adjustment Summary
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <div className="text-gray-600">Total Periods</div>
-          <div className="text-lg font-semibold text-gray-900">
-            {totalPeriods}
-          </div>
-        </div>
-
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-          <div className="text-gray-600">Adjusted Periods</div>
-          <div className="text-lg font-semibold text-green-700">
-            {adjustedCount}
-          </div>
-        </div>
-
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="text-gray-600">Adjusted With Other Faculty</div>
-          <div className="text-lg font-semibold text-blue-700">
-            {adjustedWithFaculty}
-          </div>
-        </div>
-
-        {adjustedWithoutFaculty > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-            <div className="text-gray-600">Adjusted Without Other Faculty</div>
-            <div className="text-lg font-semibold text-yellow-700">
-              {adjustedWithoutFaculty}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-})()}
-
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setSelectedRequest(request)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  View Details & Respond
-                </button>
-              </div>
-
-              {selectedRequest && selectedRequest._id === request._id && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Comments (Optional)
-                    </label>
-                    <textarea
-                      value={comments}
-                      onChange={(e) => setComments(e.target.value)}
-                      rows="3"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
-                      placeholder="Add any comments..."
-                    />
-                  </div>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => handleAction(request._id, "approve")}
-                      disabled={actionLoading}
-                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-                    >
-                      {actionLoading ? "Processing..." : "Approve"}
-                    </button>
-                    <button
-                      onClick={() => handleAction(request._id, "reject")}
-                      disabled={actionLoading}
-                      className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50"
-                    >
-                      {actionLoading ? "Processing..." : "Reject"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedRequest(null);
-                        setComments("");
-                      }}
-                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -313,14 +209,3 @@ function ApproveLeave() {
 }
 
 export default ApproveLeave;
-
-
-
-
-
-
-
-
-
-
-

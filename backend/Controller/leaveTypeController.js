@@ -1,154 +1,121 @@
+const moment = require("moment");
 const LeaveType = require("../Models/LeaveType");
-const EmployeeLeave = require("../Models/EmployeeLeave");
 const User = require("../Models/User");
+const EmployeeLeave = require("../Models/EmployeeLeave");
+const LeaveRequest = require("../Models/LeaveRequest");
 
 // -------------------------------
-// ADD Leave Type
+// 1. ADD Leave Type (With Range + Effect)
 // -------------------------------
-/*exports.addLeaveType = async (req, res) => {
+exports.addLeaveType = async (req, res) => {
   try {
-    const { name, allowedLeaves, roles, departmentId, isForwarding } = req.body;
+    const {
+      name,
+      allowedLeaves,
+      roles,
+      isForwarding,
+      isHalfDayAllowed,
+      leaveEffect,        // ✅ NEW
+      startDate,
+      endDate
+    } = req.body;
 
-    if (!name || !allowedLeaves || !roles || roles.length === 0) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
+    const policyStart = moment(startDate).startOf("day");
+    const policyEnd = moment(endDate).endOf("day");
 
-    const leaveType = new LeaveType({ name, allowedLeaves, roles, isForwarding });
-    await leaveType.save();
+    const totalPeriodDays = policyEnd.diff(policyStart, "days") + 1;
+    if (totalPeriodDays <= 0)
+      return res.status(400).json({ message: "Invalid Date Range" });
 
-    const filter = { role: { $in: roles } };
-    if (departmentId) filter.departmentType = departmentId;
+    // 1️⃣ Save Leave Type
+    const leaveType = await LeaveType.create({
+      name,
+      allowedLeaves,
+      roles,
+      isForwarding,
+      isHalfDayAllowed,
+      leaveEffect,     // ✅ STORED
+      startDate,
+      endDate
+    });
 
-    const users = await User.find(filter);
+    // 2️⃣ Find Target Users
+    const users = await User.find({ role: { $in: roles } });
 
-    const allocations = users.map(u => ({
-      employeeId: u._id,
-      leaveTypeId: leaveType._id,
-      totalLeaves: allowedLeaves
-    }));
+    const allocations = users.map(user => {
+      const joiningDate = moment(user.joiningDate).startOf("day");
+      const userActiveStart = moment.max(policyStart, joiningDate);
+
+      if (userActiveStart.isAfter(policyEnd)) return null;
+
+      const activeDays = policyEnd.diff(userActiveStart, "days") + 1;
+      const prorated = (allowedLeaves / totalPeriodDays) * activeDays;
+
+      const finalLeaves = Math.round(prorated * 2) / 2;
+
+      return {
+        employeeId: user._id,
+        leaveTypeId: leaveType._id,
+        totalLeaves: leaveEffect === "ADD" ? 0 : finalLeaves,
+        usedLeaves: 0,
+        carryForwardLeaves: 0,
+        creditLeaves: leaveEffect === "ADD" ? finalLeaves : 0
+      };
+    }).filter(Boolean);
 
     if (allocations.length > 0) {
       await EmployeeLeave.insertMany(allocations);
     }
 
     res.status(201).json({
-      message: `Leave type created and allocated to ${allocations.length} users`,
-      leaveType
+      message: "Leave policy created with effect applied"
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server Error" });
-  }
-};*/
-const moment = require("moment");
-
-exports.addLeaveType = async (req, res) => {
-  try {
-    const { name, allowedLeaves, roles, departmentId, isForwarding } = req.body;
-
-    const leaveType = new LeaveType({ name, allowedLeaves, roles, isForwarding });
-    await leaveType.save();
-
-    const filter = { role: { $in: roles } };
-    if (departmentId) filter.departmentType = departmentId;
-
-    const users = await User.find(filter);
-
-    const currentYear = moment().year();
-
-    const allocations = users.map(u => {
-      const joinYear = moment(u.joiningDate).year();
-      const joinMonth = moment(u.joiningDate).month() + 1;
-
-      let totalLeaves = allowedLeaves;
-
-      // If employee joined this year → prorated leaves
-      if (joinYear === currentYear) {
-        const monthsLeft = 12 - joinMonth + 1;
-        totalLeaves = Math.round((allowedLeaves / 12) * monthsLeft);
-      }
-
-      return {
-        employeeId: u._id,
-        leaveTypeId: leaveType._id,
-        totalLeaves,
-        usedLeaves: 0,
-        carryForwardLeaves: 0
-      };
-    });
-
-    await EmployeeLeave.insertMany(allocations);
-
-    res.status(201).json({
-      message: "Leave type created and allocated with join-date calculation",
-      leaveType
-    });
-
-  } catch (err) {
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: err.message });
   }
 };
 
-
-
 // -------------------------------
-// EDIT Leave Type
+// 2. UPDATE Leave Type
 // -------------------------------
 exports.updateLeaveType = async (req, res) => {
   try {
-    const { name, allowedLeaves, roles, isForwarding } = req.body;
     const id = req.params.id;
 
-    const leaveType = await LeaveType.findById(id);
-    if (!leaveType) return res.status(404).json({ message: "Leave type not found" });
-
-    leaveType.name = name;
-    leaveType.allowedLeaves = allowedLeaves;
-    leaveType.roles = roles;
-    leaveType.isForwarding = isForwarding;
-
-    await leaveType.save();
-
-    // also update allowed leaves for employees
-    await EmployeeLeave.updateMany(
-      { leaveTypeId: id },
-      { $set: { totalLeaves: allowedLeaves } }
+    const updated = await LeaveType.findByIdAndUpdate(
+      id,
+      req.body,
+      { new: true }
     );
 
-    res.json({ message: "Leave type updated", leaveType });
+    if (!updated)
+      return res.status(404).json({ message: "Leave type not found" });
+
+    res.json({ message: "Leave type updated", updated });
 
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 };
 
-
 // -------------------------------
-// DELETE Leave Type
+// 3. DELETE Leave Type
 // -------------------------------
 exports.deleteLeaveType = async (req, res) => {
   try {
     const id = req.params.id;
-
-    const leaveType = await LeaveType.findById(id);
-    if (!leaveType) return res.status(404).json({ message: "Not found" });
-
     await LeaveType.findByIdAndDelete(id);
     await EmployeeLeave.deleteMany({ leaveTypeId: id });
 
     res.json({ message: "Leave type deleted successfully" });
-
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 };
 
-
 // -------------------------------
-// LIST All Leave Types
+// 4. LIST Leave Types
 // -------------------------------
 exports.getAllLeaveTypes = async (req, res) => {
   try {
@@ -159,95 +126,59 @@ exports.getAllLeaveTypes = async (req, res) => {
   }
 };
 
-
 // -------------------------------
-// SEARCH Leave Types
+// 5. SEARCH Leave Types
 // -------------------------------
 exports.searchLeaveType = async (req, res) => {
   try {
-    const keyword = req.query.q;
-
     const results = await LeaveType.find({
-      name: { $regex: keyword, $options: "i" }
+      name: { $regex: req.query.q, $options: "i" }
     });
-
     res.json(results);
-
   } catch (err) {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
 // -------------------------------
-// GET Leave Summary for a Faculty
+// 6. FACULTY LEAVE SUMMARY
 // -------------------------------
 exports.getFacultyLeaveSummary = async (req, res) => {
   try {
-    const employeeId = req.params.employeeId;
+    const { employeeId } = req.params;
 
-    const leaves = await EmployeeLeave.find({ employeeId })
-      .populate("leaveTypeId", "name allowedLeaves isForwarding")
-      .sort({ createdAt: -1 });
+    const leaves = await EmployeeLeave
+      .find({ employeeId })
+      .populate("leaveTypeId");
 
-    if (!leaves || leaves.length === 0) {
-      return res.status(200).json([]); // return empty array to prevent frontend errors
-    }
+    const formatted = leaves.map(l => {
+      if (!l.leaveTypeId) return null;
 
-    // Calculate monthly and yearly usage from approved leave requests
-    const startOfYear = moment().startOf("year").toDate();
-    const endOfYear = moment().endOf("year").toDate();
-    const startOfMonth = moment().startOf("month").toDate();
-    const endOfMonth = moment().endOf("month").toDate();
+      const effect = l.leaveTypeId.leaveEffect;
 
-    const LeaveRequest = require("../Models/LeaveRequest");
+      const totalAvailable =
+        effect === "ADD"
+          ? l.creditLeaves
+          : (l.totalLeaves + l.carryForwardLeaves);
 
-    const approvedRequests = await LeaveRequest.find({
-      employeeId,
-      status: "approved",
-      startDate: { $gte: startOfYear, $lte: endOfYear }
-    }).select("leaveTypeId totalDays startDate");
-
-    const yearlyUsage = {};
-    const monthlyUsage = {};
-
-    approvedRequests.forEach(reqDoc => {
-      const key = reqDoc.leaveTypeId.toString();
-      yearlyUsage[key] = (yearlyUsage[key] || 0) + (reqDoc.totalDays || 0);
-
-      if (
-        reqDoc.startDate >= startOfMonth &&
-        reqDoc.startDate <= endOfMonth
-      ) {
-        monthlyUsage[key] = (monthlyUsage[key] || 0) + (reqDoc.totalDays || 0);
-      }
-    });
-
-    const formatted = leaves.map(entry => {
-      const allowed = entry.totalLeaves || 0;
-      const carry = entry.carryForwardLeaves || 0;
-      const used = entry.usedLeaves || 0;
-
-      const totalAvailable = allowed + carry;
-      const remaining = Math.max(totalAvailable - used, 0);
-
-      const key = entry.leaveTypeId?._id?.toString();
+      const remaining =
+        effect === "ADD"
+          ? l.creditLeaves
+          : Math.max(totalAvailable - l.usedLeaves, 0);
 
       return {
-        leaveTypeId: entry.leaveTypeId?._id,
-        leaveTypeName: entry.leaveTypeId?.name || "Unknown",
-        allowedLeaves: allowed,
-        carryForwardLeaves: carry,
-        usedLeaves: used,
+        leaveTypeId: l.leaveTypeId._id,
+        leaveTypeName: l.leaveTypeId.name,
+        leaveEffect: effect,
         totalAvailable,
         remainingLeaves: remaining,
-        usedThisYear: key ? yearlyUsage[key] || 0 : 0,
-        usedThisMonth: key ? monthlyUsage[key] || 0 : 0
+        isHalfDayAllowed: l.leaveTypeId.isHalfDayAllowed
       };
-    });
+    }).filter(Boolean);
 
     res.json(formatted);
 
   } catch (err) {
-    console.error("Error fetching leave summary:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };

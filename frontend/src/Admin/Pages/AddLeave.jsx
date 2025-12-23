@@ -6,19 +6,24 @@ function AddLeaveType() {
   const [allowedLeaves, setAllowedLeaves] = useState("");
   const [roles, setRoles] = useState([]);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [isHalfDayAllowed, setIsHalfDayAllowed] = useState(false);
+  const [leaveEffect, setLeaveEffect] = useState("DEDUCT");
 
-  const handleRoleChange = (role) => {
-    setRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
-  };
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const roleList = ["teaching", "non-teaching", "hod", "admin", "director"];
+
+  const handleRoleChange = (role) => {
+    setRoles(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!name || !allowedLeaves || roles.length === 0) {
+    if (!name || !allowedLeaves || !roles.length || !startDate || !endDate) {
       return alert("Please fill all fields");
     }
 
@@ -28,135 +33,98 @@ function AddLeaveType() {
         allowedLeaves,
         roles,
         isForwarding,
+        isHalfDayAllowed,
+        leaveEffect,
+        startDate,
+        endDate
       });
 
-      alert("Leave type added!");
-      setName("");
-      setAllowedLeaves("");
-      setRoles([]);
-      setIsForwarding(false);
+      alert("Leave type created successfully");
+
     } catch (err) {
-      alert("Error adding leave type");
+      alert(err.response?.data?.message || "Error occurred");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center 
-        bg-gradient-to-br from-blue-100 via-white to-blue-200 p-5">
-      
-      <div className="w-full max-w-xl bg-white/80 shadow-2xl rounded-3xl 
-          border border-gray-200 backdrop-blur-xl p-10 animate-fadeIn 
-          transform transition-all duration-500 hover:shadow-[0_0_50px_rgba(0,0,0,0.15)]">
-        
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-transparent 
-              bg-gradient-to-r from-blue-700 to-blue-900 bg-clip-text drop-shadow-sm">
-            Create Leave Type
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Configure annual leave rules for your institute
-          </p>
-        </div>
+    <div className="min-h-screen flex justify-center items-center bg-gray-100 p-6">
+      <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-xl">
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <h2 className="text-2xl font-bold text-center mb-6">
+          Create Leave Policy
+        </h2>
 
-          {/* Floating Label Input */}
-          <div className="relative">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="peer w-full p-4 pt-6 border border-gray-300 rounded-2xl 
-              bg-transparent focus:border-blue-600 outline-none text-gray-900"
-            />
-            <label
-              className="absolute left-4 top-1 text-gray-500 text-sm 
-              transition-all peer-focus:text-blue-600 peer-focus:top-1 
-              peer-placeholder-shown:top-4 peer-placeholder-shown:text-base"
-            >
-              Leave Type
-            </label>
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          <input
+            type="text"
+            placeholder="Leave Name"
+            className="w-full p-3 border rounded-xl"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <input type="date" value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="p-3 border rounded-xl" />
+
+            <input type="date" value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="p-3 border rounded-xl" />
           </div>
 
-          {/* Allowed Leaves */}
-          <div className="relative">
-            <input
-              type="number"
-              value={allowedLeaves}
-              onChange={(e) => setAllowedLeaves(e.target.value)}
-              required
-              className="peer w-full p-4 pt-6 border border-gray-300 rounded-2xl 
-              bg-transparent focus:border-blue-600 outline-none text-gray-900"
-            />
-            <label
-              className="absolute left-4 top-1 text-gray-500 text-sm 
-              transition-all peer-focus:text-blue-600 peer-focus:top-1 
-              peer-placeholder-shown:top-4 peer-placeholder-shown:text-base"
-            >
-              Allowed Leaves (per year)
-            </label>
+          <input
+            type="number"
+            placeholder="Allowed Leaves"
+            className="w-full p-3 border rounded-xl"
+            value={allowedLeaves}
+            onChange={e => setAllowedLeaves(e.target.value)}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button"
+              onClick={() => setIsHalfDayAllowed(!isHalfDayAllowed)}
+              className={`p-2 rounded-xl ${isHalfDayAllowed ? "bg-blue-600 text-white" : "border"}`}>
+              Half Day
+            </button>
+
+            <button type="button"
+              onClick={() => setIsForwarding(!isForwarding)}
+              className={`p-2 rounded-xl ${isForwarding ? "bg-blue-600 text-white" : "border"}`}>
+              Carry Forward
+            </button>
           </div>
 
-          {/* Roles */}
-          <div>
-            <p className="font-semibold text-gray-700 mb-3">Applicable Roles</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {roleList.map((r) => (
-                <label
-                  key={r}
-                  className={`cursor-pointer flex items-center gap-2 p-3 rounded-2xl 
-                  border transition-all shadow-sm hover:shadow-md
-                  ${
-                    roles.includes(r)
-                      ? "bg-blue-600 text-white border-blue-700"
-                      : "bg-white text-gray-700 border-gray-300"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="hidden"
-                    checked={roles.includes(r)}
-                    onChange={() => handleRoleChange(r)}
-                  />
-                  <span className="capitalize font-medium">{r}</span>
-                </label>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button"
+              onClick={() => setLeaveEffect("DEDUCT")}
+              className={`p-2 rounded-xl ${leaveEffect === "DEDUCT" ? "bg-red-600 text-white" : "border"}`}>
+              Deduct Leave
+            </button>
+
+            <button type="button"
+              onClick={() => setLeaveEffect("ADD")}
+              className={`p-2 rounded-xl ${leaveEffect === "ADD" ? "bg-green-600 text-white" : "border"}`}>
+              Credit Leave
+            </button>
           </div>
 
-          {/* Toggle Switch */}
-          <div className="flex items-center justify-between bg-gray-50 
-          p-4 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-gray-800 font-semibold">
-              Enable Leave Forwarding
-            </span>
-
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={isForwarding}
-                onChange={() => setIsForwarding(!isForwarding)}
-              />
-              <div className="w-14 h-7 bg-gray-300 rounded-full peer peer-checked:bg-blue-600 
-                  transition relative">
-                <div className="absolute top-1 left-1 w-5 h-5 bg-white rounded-full
-                    shadow-md transition peer-checked:translate-x-7"></div>
-              </div>
-            </label>
+          <div className="flex flex-wrap gap-2">
+            {roleList.map(r => (
+              <button key={r} type="button"
+                onClick={() => handleRoleChange(r)}
+                className={`px-3 py-1 rounded-lg border ${roles.includes(r) ? "bg-blue-800 text-white" : ""}`}>
+                {r}
+              </button>
+            ))}
           </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            className="w-full py-4 text-lg font-bold text-white rounded-2xl 
-          bg-gradient-to-r from-blue-700 to-blue-900 shadow-lg 
-          hover:from-blue-800 hover:to-blue-950 hover:shadow-xl 
-          transition transform hover:scale-[1.02]"
-          >
-            Add & Allocate
+          <button type="submit"
+            className="w-full bg-blue-900 text-white py-3 rounded-xl font-bold">
+            Create Leave Policy
           </button>
+
         </form>
       </div>
     </div>

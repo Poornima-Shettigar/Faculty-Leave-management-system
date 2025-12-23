@@ -88,7 +88,7 @@ function MyLeaveStatus() {
                     <td className="px-6 py-4 text-sm">{request.leaveTypeId?.name || "N/A"}</td>
                     <td className="px-6 py-4 text-sm">{formatDate(request.startDate)}</td>
                     <td className="px-6 py-4 text-sm">{formatDate(request.endDate)}</td>
-                    <td className="px-6 py-4 text-sm font-medium">{request.totalDays}</td>
+                    <td className="px-6 py-4 text-sm font-medium">{request.isHalfDay ? 0.5 : request.totalDays}</td>
                     <td className="px-6 py-4">{getStatusBadge(request.status)}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {formatDate(request.createdAt)}

@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const leaveRequestSchema = new mongoose.Schema({
+
   employeeId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "User", 
@@ -32,27 +33,32 @@ const leaveRequestSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
-  
-  // Period adjustments for teaching staff
+
   periodAdjustments: [{
     date: { type: Date, required: true },
     day: { type: String, required: true },
     period: { type: Number, required: true },
     className: { type: String, required: true },
     departmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
+
     substituteFacultyId: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: "User",
       default: null
     },
+
+    notificationSent: { // new field!
+      type: Boolean,
+      default: false
+    },
+
     status: { 
       type: String, 
       enum: ["pending", "adjusted", "not_required"],
       default: "pending"
     }
   }],
-  
-  // Approval workflow
+
   status: { 
     type: String, 
     enum: [
@@ -64,13 +70,13 @@ const leaveRequestSchema = new mongoose.Schema({
     ],
     default: "pending_hod"
   },
-  
+
   hodApproval: {
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approvedAt: { type: Date },
     comments: { type: String }
   },
-  
+
   directorApproval: {
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     approvedAt: { type: Date },
@@ -78,31 +84,19 @@ const leaveRequestSchema = new mongoose.Schema({
   },
   
   createdAt: { 
-    type: Date, 
-    default: Date.now 
+    type: Date,
+    default: Date.now
   },
   
   updatedAt: { 
-    type: Date, 
-    default: Date.now 
+    type: Date,
+    default: Date.now
   }
 });
 
-// Update the updatedAt field before saving
-leaveRequestSchema.pre('save', function(next) {
+leaveRequestSchema.pre("save", function(next) {
   this.updatedAt = Date.now();
   next();
 });
 
 module.exports = mongoose.model("LeaveRequest", leaveRequestSchema);
-
-
-
-
-
-
-
-
-
-
-

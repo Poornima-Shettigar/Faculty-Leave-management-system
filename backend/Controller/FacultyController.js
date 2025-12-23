@@ -478,22 +478,57 @@ exports.getFacultyCount = async (req, res) => {
 // =============================
 // ADMIN DASHBOARD STATS
 // =============================
+// exports.getAdminDashboardStats = async (req, res) => {
+//   try {
+//     const departments = await Department.find();
+//     const stats = [];
+
+//     for (const dept of departments) {
+//       const teaching = await User.countDocuments({
+//         departmentType: dept._id,
+//         role: "teaching"
+//       });
+//       const nonTeaching = await User.countDocuments({
+//         departmentType: dept._id,
+//         role: "non-teaching"
+//       });
+
+//       stats.push({
+//         departmentName: dept.departmentName,
+//         teachingStaff: teaching,
+//         nonTeachingStaff: nonTeaching,
+//         total: teaching + nonTeaching
+//       });
+//     }
+
+//     res.json(stats);
+//   } catch (err) {
+//     res.status(500).json({ message: "Server Error" });
+//   }
+// };
+// =============================
+// ADMIN DASHBOARD STATS (FIXED)
+// =============================
 exports.getAdminDashboardStats = async (req, res) => {
   try {
-    const departments = await Department.find();
+    const departments = await Department.find().sort({ departmentName: 1 });
     const stats = [];
 
     for (const dept of departments) {
+      // Logic: HODs are usually considered teaching staff. 
+      // If you want HODs included in the teaching count:
       const teaching = await User.countDocuments({
         departmentType: dept._id,
-        role: "teaching"
+        role: { $in: ["teaching", "hod","director"] } // Include HOD here
       });
+
       const nonTeaching = await User.countDocuments({
         departmentType: dept._id,
         role: "non-teaching"
       });
 
       stats.push({
+        departmentId: dept._id, // Adding this helps React keys
         departmentName: dept.departmentName,
         teachingStaff: teaching,
         nonTeachingStaff: nonTeaching,
@@ -503,6 +538,7 @@ exports.getAdminDashboardStats = async (req, res) => {
 
     res.json(stats);
   } catch (err) {
+    console.error("Error fetching admin dashboard stats:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };

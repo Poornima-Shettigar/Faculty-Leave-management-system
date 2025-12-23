@@ -73,6 +73,7 @@ function Sidebar() {
                 <li><NavLink to="leave-delete">Delete/Edit Leave</NavLink></li>
               </ul>
             )}
+            <li><NavLink to="leave-report">Report</NavLink></li>
            
           </>
         )}
@@ -80,7 +81,7 @@ function Sidebar() {
         {/* FACULTY MENU */}
         {userRole === "teaching" && (
           <>
-            <li><NavLink to="view-timetable">My Timetable</NavLink></li>
+            {/* <li><NavLink to="view-timetable">My Timetable</NavLink></li> */}
              <li><NavLink to="view-subject">My Subject</NavLink></li>
             <li><NavLink to="apply-leave">Apply Leave</NavLink></li>
             <li><NavLink to="my-leave-status">Leave Status</NavLink></li>

@@ -80,87 +80,167 @@ function DashboardHome() {
   );
 
   /* ----------- FACULTY DASHBOARD ----------- */
-  const FacultyDashboard = () => (
-    <div>
-      <h2 className="text-xl font-semibold text-gray-800 mb-6">
+  // const FacultyDashboard = () => (
+  //   <div>
+  //     <h2 className="text-xl font-semibold text-gray-800 mb-6">
+  //       Leave Balance – Current Academic Year
+  //     </h2>
+
+  //     {leaveBalance.length === 0 ? (
+  //       <p className="text-gray-500">No leave data found.</p>
+  //     ) : (
+  //       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+  //         {leaveBalance.map((leave) => {
+  //           const percentage =
+  //             (leave.remainingLeaves / leave.totalAvailable) * 100;
+
+  //           const barColor =
+  //             percentage > 60
+  //               ? "bg-green-500"
+  //               : percentage > 30
+  //               ? "bg-yellow-400"
+  //               : "bg-red-500";
+
+  //           return (
+  //             <div
+  //               key={leave.leaveTypeId}
+  //               className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 hover:shadow-xl transition"
+  //             >
+  //               <div className="flex justify-between items-center mb-4">
+  //                 <h3 className="text-lg font-semibold text-gray-800">
+  //                   {leave.leaveTypeName}
+  //                 </h3>
+  //                 <span className="text-sm text-gray-500">
+  //                   {leave.remainingLeaves}/{leave.totalAvailable}
+  //                 </span>
+  //               </div>
+
+  //               {/* Progress */}
+  //               <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+  //                 <div
+  //                   className={`${barColor} h-2 rounded-full`}
+  //                   style={{ width: `${percentage}%` }}
+  //                 ></div>
+  //               </div>
+
+  //               {/* Details */}
+  //               <div className="grid grid-cols-2 gap-4 text-sm">
+  //                 <div>
+  //                   <p className="text-xs text-gray-500">Allowed</p>
+  //                   <p className="font-semibold">{leave.allowedLeaves}</p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-xs text-gray-500">Carry Forward</p>
+  //                   <p className="font-semibold">{leave.carryForwardLeaves}</p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-xs text-gray-500">Used</p>
+  //                   <p className="font-semibold text-red-600">
+  //                     {leave.usedLeaves}
+  //                   </p>
+  //                 </div>
+  //                 <div>
+  //                   <p className="text-xs text-gray-500">Remaining</p>
+  //                   <p className="font-semibold text-green-600">
+  //                     {leave.remainingLeaves}
+  //                   </p>
+  //                 </div>
+  //               </div>
+  //             </div>
+  //           );
+  //         })}
+  //       </div>
+  //     )}
+  //   </div>
+  // );
+const FacultyDashboard = () => (
+  <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+    <div className="p-6 border-b border-gray-100">
+      <h2 className="text-xl font-semibold text-gray-800">
         Leave Balance – Current Academic Year
       </h2>
-
-      {leaveBalance.length === 0 ? (
-        <p className="text-gray-500">No leave data found.</p>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {leaveBalance.map((leave) => {
-            const percentage =
-              (leave.remainingLeaves / leave.totalAvailable) * 100;
-
-            const barColor =
-              percentage > 60
-                ? "bg-green-500"
-                : percentage > 30
-                ? "bg-yellow-400"
-                : "bg-red-500";
-
-            return (
-              <div
-                key={leave.leaveTypeId}
-                className="bg-white rounded-2xl shadow-md border border-gray-100 p-6 hover:shadow-xl transition"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    {leave.leaveTypeName}
-                  </h3>
-                  <span className="text-sm text-gray-500">
-                    {leave.remainingLeaves}/{leave.totalAvailable}
-                  </span>
-                </div>
-
-                {/* Progress */}
-                <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                  <div
-                    className={`${barColor} h-2 rounded-full`}
-                    style={{ width: `${percentage}%` }}
-                  ></div>
-                </div>
-
-                {/* Details */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Allowed</p>
-                    <p className="font-semibold">{leave.allowedLeaves}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Carry Forward</p>
-                    <p className="font-semibold">{leave.carryForwardLeaves}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Used</p>
-                    <p className="font-semibold text-red-600">
-                      {leave.usedLeaves}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Remaining</p>
-                    <p className="font-semibold text-green-600">
-                      {leave.remainingLeaves}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
-  );
 
+    {leaveBalance.length === 0 ? (
+      <div className="p-6 text-gray-500">No leave data found.</div>
+    ) : (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Leave Type</th>
+              <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Allowed</th>
+              <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Carry Forward</th>
+              <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Total Available</th>
+              <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Used</th>
+              <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Remaining</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-48">Usage Status</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {leaveBalance.map((leave) => {
+              const percentage = (leave.remainingLeaves / leave.totalAvailable) * 100;
+              const barColor =
+                percentage > 60
+                  ? "bg-green-500"
+                  : percentage > 30
+                  ? "bg-yellow-400"
+                  : "bg-red-500";
+
+              return (
+                <tr key={leave.leaveTypeId} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-semibold text-gray-900">{leave.leaveTypeName}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
+                    {leave.allowedLeaves}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
+                    {leave.carryForwardLeaves}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium text-gray-800">
+                    {leave.totalAvailable}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-red-600">
+                    {leave.usedLeaves}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">
+                    {leave.remainingLeaves}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[100px]">
+                        <div
+                          className={`${barColor} h-2 rounded-full transition-all duration-500`}
+                          style={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-xs font-medium text-gray-500">
+                        {Math.round(percentage)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+);
   /* ----------- ROLE DASHBOARDS ----------- */
 
   const AdminDashboard = () => {
-    const departmentStats = stats.departmentStats || [];
-    const totalTeaching = departmentStats.reduce((sum, dept) => sum + (dept.teachingStaff || 0), 0);
-    const totalNonTeaching = departmentStats.reduce((sum, dept) => sum + (dept.nonTeachingStaff || 0), 0);
-
+//     const departmentStats = stats.departmentStats || [];
+//     const totalTeaching = departmentStats.reduce((sum, dept) => sum + (dept.teachingStaff || 0), 0);
+//     const totalNonTeaching = departmentStats.reduce((sum, dept) => sum + (dept.nonTeachingStaff || 0), 0);
+// const AdminDashboard = () => {
+  const departmentStats = stats.departmentStats || [];
+  
+  // Use Number() to ensure math works even if values come as strings
+  const totalTeaching = departmentStats.reduce((sum, dept) => sum + (Number(dept.teachingStaff) || 0), 0);
+  const totalNonTeaching = departmentStats.reduce((sum, dept) => sum + (Number(dept.nonTeachingStaff) || 0), 0);
     return (
       <div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
@@ -178,7 +258,7 @@ function DashboardHome() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"> Staff</th>
-                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Non-Teaching Staff</th> */}
+                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Non-Teaching Staff</th> 
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                 </tr>
               </thead>
@@ -189,11 +269,11 @@ function DashboardHome() {
                       {dept.departmentName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {dept.teachingStaff ||dept.nonTeachingStaff || 0}
+                      {dept.teachingStaff   || 0}
                     </td>
-                    {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {dept.nonTeachingStaff || 0}
-                    </td> */}
+                    </td> 
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {dept.total || 0}
                     </td>

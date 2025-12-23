@@ -22,7 +22,8 @@ const notificationSchema = new mongoose.Schema({
       "leave_approved_director",
       "leave_rejected_director",
       "leave_approved",
-      "leave_rejected"
+      "leave_rejected",
+      "substitute_assignment"
     ],
     required: true 
   },
