@@ -5,7 +5,8 @@ const {
   deleteLeaveType,
   getAllLeaveTypes,
   searchLeaveType,
-  getFacultyLeaveSummary
+  getFacultyLeaveSummary,
+  getDepartmentLeaveBalance 
 } = require("../Controller/leaveTypeController");
 
 const router = express.Router();
@@ -16,5 +17,7 @@ router.delete("/delete/:id", deleteLeaveType);
 router.get("/list", getAllLeaveTypes);
 router.get("/search", searchLeaveType);
 router.get("/faculty/:employeeId/leaves", getFacultyLeaveSummary);
-
-module.exports = router;
+router.get(
+  "/department/leave-balance",
+  getDepartmentLeaveBalance
+);module.exports = router;

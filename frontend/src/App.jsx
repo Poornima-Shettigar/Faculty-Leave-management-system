@@ -56,6 +56,7 @@ import DashboardHome from "./Nonteaching/DashboardHome.jsx";
 import ViewFacultylist from "./HOD/ViewFacultylist.jsx"
 import AllDeptReport from "./Director/AllDeptReport.jsx"
 import AnalyticsDashboard from "./Director/AnalyticsDashboard.jsx"
+import SubstitutionPage from "./Faculty/SubstitutionPage.jsx";
 import {
  
  
@@ -128,7 +129,7 @@ function App() {
             <Route path="my-timetable" element={<MyTimetable />} />
             <Route path="view-timetable" element={<ViewTimetableFaculty />} />
             <Route path="view-subject" element={<ViewSubjectsForFaculty />} />
-            
+            <Route path="substitution-details" element={<SubstitutionPage />} />
             <Route path="apply-leave" element={<ApplyLeave />} />
             <Route path="my-leave-status" element={<MyLeaveStatus />} />
             

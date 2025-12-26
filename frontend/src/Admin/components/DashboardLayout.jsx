@@ -85,7 +85,7 @@ function Sidebar() {
              <li><NavLink to="view-subject">My Subject</NavLink></li>
             <li><NavLink to="apply-leave">Apply Leave</NavLink></li>
             <li><NavLink to="my-leave-status">Leave Status</NavLink></li>
-
+<li><NavLink to="substitution-details">Substitution Details</NavLink></li>
           </>
         )}
   {userRole === "non-teaching" && (

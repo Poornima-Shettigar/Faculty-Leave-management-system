@@ -25,6 +25,15 @@ router.put("/director/action/:leaveRequestId", leaveRequestController.directorAp
 // Notifications
 router.get("/notifications/:userId", leaveRequestController.getNotifications);
 router.put("/notifications/:notificationId/read", leaveRequestController.markNotificationRead);
+router.get("/my-substitutions/:facultyId", leaveRequestController.getMySubstitutions);
+
+// Get substitution details for a given leave request for a given faculty
+router.get(
+  "/substitution-details/:leaveRequestId/:facultyId",
+  leaveRequestController.getSubstitutionDetailsForFaculty
+);
+
+
 
 // Dashboard Stats
 router.get("/director/stats", leaveRequestController.getDirectorDashboardStats);
