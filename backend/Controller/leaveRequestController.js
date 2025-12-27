@@ -7,29 +7,16 @@ const Timetable = require("../Models/Timetable");
 const Department = require("../Models/Department");
 const moment = require("moment");
 
-// Helper: create notification
-// const createNotification = async (userId, leaveRequestId, type, title, message) => {
-//   try {
-//     const notification = new Notification({
-//       userId,
-//       leaveRequestId,
-//       type,
-//       title,
-//       message,
-//     });
-//     await notification.save();
-//   } catch (error) {
-//     console.error("Error creating notification:", error);
-//   }
-// };
-// Helper: create notification - ✅ WITH DEBUG LOGGING
+// =============================
+// HELPER: CREATE NOTIFICATION
+// =============================
 const createNotification = async (userId, leaveRequestId, type, title, message) => {
   try {
-    console.log(`📧 Creating notification:`, {
+    console.log("📧 Creating notification:", {
       userId: userId.toString(),
       type,
       title,
-      message: message.substring(0, 100) + "..."
+      message: message.substring(0, 100) + "...",
     });
 
     const notification = new Notification({
@@ -38,20 +25,21 @@ const createNotification = async (userId, leaveRequestId, type, title, message) 
       type,
       title,
       message,
-      isRead: false, // ✅ Default to unread
+      isRead: false,
     });
-    
+
     const savedNotification = await notification.save();
     console.log(`✅ Notification saved: ${savedNotification._id}`);
     return savedNotification;
   } catch (error) {
     console.error("❌ Error creating notification:", error);
-    throw error; // ✅ Re-throw to catch in caller
+    throw error;
   }
 };
 
-
-// Helper: get periods for date range - ✅ FIXED with semester
+// =============================
+// HELPER: GET PERIODS FOR DATE RANGE
+// =============================
 const getPeriodsForDateRange = async (employeeId, startDate, endDate) => {
   const periods = [];
   const currentDate = moment(startDate);
@@ -60,7 +48,9 @@ const getPeriodsForDateRange = async (employeeId, startDate, endDate) => {
   const user = await User.findById(employeeId).populate("departmentType");
   if (!user || !user.departmentType) return periods;
 
-  const timetables = await Timetable.find({ departmentType: user.departmentType._id })
+  const timetables = await Timetable.find({
+    departmentType: user.departmentType._id,
+  })
     .populate("timetable.faculty", "name email")
     .populate("timetable.subject", "subjectName subjectCode");
 
@@ -70,7 +60,7 @@ const getPeriodsForDateRange = async (employeeId, startDate, endDate) => {
 
     for (const timetable of timetables) {
       const dayPeriods = timetable.timetable.filter(
-        entry =>
+        (entry) =>
           entry.day === dayName &&
           entry.faculty &&
           entry.faculty._id.toString() === employeeId.toString()
@@ -83,7 +73,7 @@ const getPeriodsForDateRange = async (employeeId, startDate, endDate) => {
           period: period.period,
           className: timetable.className,
           departmentId: user.departmentType._id,
-          semester: timetable.semester, // ✅ FIXED: Added semester
+          semester: timetable.semester,
           subjectId: period.subject?._id || period.subject,
           subjectName: period.subject?.subjectName || "N/A",
           facultyId: period.faculty?._id,
@@ -100,10 +90,104 @@ const getPeriodsForDateRange = async (employeeId, startDate, endDate) => {
 // =============================
 // APPLY LEAVE REQUEST
 // =============================
+// exports.applyLeaveRequest = async (req, res) => {
+//   try {
+//     const {
+//       employeeId,
+//       leaveTypeId,
+//       startDate,
+//       endDate,
+//       description,
+//       periodAdjustments,
+//     } = req.body;
+
+//     if (!employeeId || !leaveTypeId || !startDate || !endDate || !description) {
+//       return res.status(400).json({ message: "All required fields are mandatory" });
+//     }
+
+//     const start = moment(startDate);
+//     const end = moment(endDate);
+//     if (end.isBefore(start)) {
+//       return res.status(400).json({ message: "Invalid date range" });
+//     }
+
+//     const totalDays = end.diff(start, "days") + 1;
+
+//     const leaveType = await LeaveType.findById(leaveTypeId);
+//     if (!leaveType) return res.status(404).json({ message: "Leave type not found" });
+
+//     const empLeave = await EmployeeLeave.findOne({ employeeId, leaveTypeId });
+//     if (!empLeave) {
+//       return res.status(400).json({ message: "Leave type not allocated" });
+//     }
+
+//     if (leaveType.leaveAction === "DEDUCT") {
+//       const available =
+//         (empLeave.totalLeaves || 0) +
+//         (empLeave.carryForwardLeaves || 0) -
+//         (empLeave.usedLeaves || 0);
+
+//       if (totalDays > available) {
+//         return res.status(400).json({ message: "Insufficient leave balance" });
+//       }
+//     }
+
+//     const leaveRequest = await LeaveRequest.create({
+//       employeeId,
+//       leaveTypeId,
+//       startDate,
+//       endDate,
+//       totalDays,
+//       description,
+//       periodAdjustments: periodAdjustments || [],
+//       status: "pending_hod",
+//     });
+
+//     const user = await User.findById(employeeId);
+
+//     const hod = await User.findOne({
+//       role: "hod",
+//       departmentType: user.departmentType,
+//     });
+
+//     if (hod) {
+//       await createNotification(
+//         hod._id,
+//         leaveRequest._id,
+//         "leave_requested",
+//         "New Leave Request",
+//         `${user.name} applied for leave`
+//       );
+//     }
+
+//     await createNotification(
+//       employeeId,
+//       leaveRequest._id,
+//       "leave_requested",
+//       "Leave Submitted",
+//       "Your leave request is sent to HOD"
+//     );
+
+//     res.status(201).json({ message: "Leave applied successfully", leaveRequest });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error", error: err.message });
+//   }
+// };
+// APPLY LEAVE REQUEST
+// APPLY LEAVE REQUEST
 exports.applyLeaveRequest = async (req, res) => {
   try {
-    const { employeeId, leaveTypeId, startDate, endDate, description, periodAdjustments } =
-      req.body;
+    const {
+      employeeId,
+      leaveTypeId,
+      startDate,
+      endDate,
+      description,
+      periodAdjustments,
+      isHalfDay,        // if you send these from frontend
+      halfDaySession,   // optional; safe to accept
+    } = req.body;
 
     if (!employeeId || !leaveTypeId || !startDate || !endDate || !description) {
       return res.status(400).json({ message: "All required fields are mandatory" });
@@ -115,16 +199,20 @@ exports.applyLeaveRequest = async (req, res) => {
       return res.status(400).json({ message: "Invalid date range" });
     }
 
+    // Total days (you can later adapt for half‑day if needed)
     const totalDays = end.diff(start, "days") + 1;
 
     const leaveType = await LeaveType.findById(leaveTypeId);
-    if (!leaveType) return res.status(404).json({ message: "Leave type not found" });
+    if (!leaveType) {
+      return res.status(404).json({ message: "Leave type not found" });
+    }
 
     const empLeave = await EmployeeLeave.findOne({ employeeId, leaveTypeId });
     if (!empLeave) {
       return res.status(400).json({ message: "Leave type not allocated" });
     }
 
+    // Balance check (same as existing)
     if (leaveType.leaveAction === "DEDUCT") {
       const available =
         (empLeave.totalLeaves || 0) +
@@ -136,6 +224,17 @@ exports.applyLeaveRequest = async (req, res) => {
       }
     }
 
+    // Get user to know role & department
+    const user = await User.findById(employeeId).populate("departmentType");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isHod = user.role === "hod";
+
+    // HOD self‑request -> directly to Director, others -> HOD
+    const initialStatus = isHod ? "pending_director" : "pending_hod";
+
     const leaveRequest = await LeaveRequest.create({
       employeeId,
       leaveTypeId,
@@ -144,43 +243,73 @@ exports.applyLeaveRequest = async (req, res) => {
       totalDays,
       description,
       periodAdjustments: periodAdjustments || [],
-      status: "pending_hod",
+      status: initialStatus,
+      // optional if your schema has these:
+      isHalfDay: !!isHalfDay,
+      halfDaySession: halfDaySession || null,
     });
 
-    const user = await User.findById(employeeId);
+    if (isHod) {
+      // HOD applying own leave: notify all Directors
+      const directors = await User.find({ role: "director" });
 
-    const hod = await User.findOne({
-      role: "hod",
-      departmentType: user.departmentType,
-    });
+      for (const director of directors) {
+        await createNotification(
+          director.id,
+          leaveRequest.id,
+          "leave_requested", // VALID ENUM
+          "Leave Pending Approval",
+          `${user.name} (HOD) applied for leave and it is pending your approval.`
+        );
+      }
 
-    if (hod) {
       await createNotification(
-        hod._id,
-        leaveRequest._id,
-        "leave_requested",
-        "New Leave Request",
-        `${user.name} applied for leave`
+        employeeId,
+        leaveRequest.id,
+        "leave_requested", // VALID ENUM
+        "Leave Submitted",
+        "Your leave request is sent to Director."
+      );
+    } else {
+      // Normal faculty: send to HOD (existing behaviour)
+      const hod = await User.findOne({
+        role: "hod",
+        departmentType: user.departmentType,
+      });
+
+      if (hod) {
+        await createNotification(
+          hod.id,
+          leaveRequest.id,
+          "leave_requested", // VALID ENUM
+          "New Leave Request",
+          `${user.name} applied for leave`
+        );
+      }
+
+      await createNotification(
+        employeeId,
+        leaveRequest.id,
+        "leave_requested", // VALID ENUM
+        "Leave Submitted",
+        "Your leave request is sent to HOD"
       );
     }
 
-    await createNotification(
-      employeeId,
-      leaveRequest._id,
-      "leave_requested",
-      "Leave Submitted",
-      "Your leave request is sent to HOD"
-    );
-
-    res.status(201).json({ message: "Leave applied successfully", leaveRequest });
+    return res
+      .status(201)
+      .json({ message: "Leave applied successfully", leaveRequest });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
 
+
 // =============================
-// HOD APPROVE / REJECT (ONLY FORWARD TO DIRECTOR)
+// HOD APPROVE / REJECT
 // =============================
 exports.hodApproveReject = async (req, res) => {
   try {
@@ -192,7 +321,9 @@ exports.hodApproveReject = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate("employeeId");
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate(
+      "employeeId"
+    );
     if (!leaveRequest || leaveRequest.status !== "pending_hod") {
       return res.status(400).json({ message: "Leave not pending HOD approval" });
     }
@@ -253,10 +384,7 @@ exports.hodApproveReject = async (req, res) => {
 };
 
 // =============================
-// DIRECTOR APPROVE / REJECT (FINAL) - ✅ FULLY FIXED
-// =============================
-// =============================
-// DIRECTOR APPROVE / REJECT (FINAL) - ✅ DEBUGGED & FIXED
+// DIRECTOR APPROVE / REJECT (FINAL)
 // =============================
 exports.directorApproveReject = async (req, res) => {
   try {
@@ -268,15 +396,12 @@ exports.directorApproveReject = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate("employeeId");
+    const leaveRequest = await LeaveRequest.findById(leaveRequestId).populate(
+      "employeeId"
+    );
     if (!leaveRequest || leaveRequest.status !== "pending_director") {
       return res.status(400).json({ message: "Leave not pending director approval" });
     }
-
-    const empLeave = await EmployeeLeave.findOne({
-      employeeId: leaveRequest.employeeId._id,
-      leaveTypeId: leaveRequest.leaveTypeId,
-    });
 
     if (action === "approve") {
       leaveRequest.status = "approved";
@@ -286,34 +411,69 @@ exports.directorApproveReject = async (req, res) => {
         comments: comments || "",
       };
 
-      if (empLeave) {
-        empLeave.usedLeaves += leaveRequest.totalDays;
-        await empLeave.save();
+      // ✅ SAFE FINAL LEAVE DEDUCTION
+      let empLeave = await EmployeeLeave.findOne({
+        employeeId: leaveRequest.employeeId._id,
+        leaveTypeId: leaveRequest.leaveTypeId,
+      });
+
+      if (!empLeave) {
+        console.warn("⚠️ EmployeeLeave not found. Creating record for deduction.", {
+          employeeId: leaveRequest.employeeId._id.toString(),
+          leaveTypeId: leaveRequest.leaveTypeId.toString(),
+        });
+
+        empLeave = new EmployeeLeave({
+          employeeId: leaveRequest.employeeId._id,
+          leaveTypeId: leaveRequest.leaveTypeId,
+          totalLeaves: 0,
+          carryForwardLeaves: 0,
+          usedLeaves: 0,
+        });
       }
 
-      // ✅ FIXED: NOTIFICATIONS FIRST (timetable optional)
-      console.log("🔍 Processing periodAdjustments:", leaveRequest.periodAdjustments);
+      empLeave.totalLeaves = empLeave.totalLeaves || 0;
+      empLeave.carryForwardLeaves = empLeave.carryForwardLeaves || 0;
+      empLeave.usedLeaves = empLeave.usedLeaves || 0;
+
+      const beforeUsed = empLeave.usedLeaves;
+      empLeave.usedLeaves += leaveRequest.totalDays;
+
+      console.log("✅ Leave deduction:", {
+        employeeId: empLeave.employeeId.toString(),
+        leaveTypeId: empLeave.leaveTypeId.toString(),
+        beforeUsed,
+        added: leaveRequest.totalDays,
+        afterUsed: empLeave.usedLeaves,
+      });
+
+      await empLeave.save();
+
+      // ✅ SUBSTITUTION NOTIFICATIONS (timetable optional)
+      console.log(
+        "🔍 Processing periodAdjustments:",
+        leaveRequest.periodAdjustments
+      );
       let substituteNotificationsSent = 0;
 
       for (let i = 0; i < (leaveRequest.periodAdjustments || []).length; i++) {
         const adj = leaveRequest.periodAdjustments[i];
-        
+
         let substituteFacultyId = adj.substituteFacultyId;
-        if (substituteFacultyId && typeof substituteFacultyId === 'object') {
+        if (substituteFacultyId && typeof substituteFacultyId === "object") {
           substituteFacultyId = substituteFacultyId._id;
         }
 
         console.log(`🔍 Adjustment ${i}:`, {
           substituteId: substituteFacultyId,
           className: adj.className,
-          semester: adj.semester || 'MISSING!',  // ✅ DEBUG semester
-          hasSubstitute: !!substituteFacultyId
+          semester: adj.semester || "MISSING!",
+          hasSubstitute: !!substituteFacultyId,
         });
 
         if (!substituteFacultyId) continue;
 
         try {
-          // ✅ SEND NOTIFICATION FIRST (priority)
           const substituteUser = await User.findById(substituteFacultyId);
           if (substituteUser) {
             await createNotification(
@@ -321,49 +481,48 @@ exports.directorApproveReject = async (req, res) => {
               leaveRequest._id,
               "substitute_assignment",
               "Substitute Assignment Confirmed ✅",
-              `You are assigned ${adj.className} on ${moment(adj.date).format("DD MMM YYYY")}, Period ${adj.period}. 
-               ${leaveRequest.employeeId.name} on approved leave. Please check timetable.`
+              `You are assigned ${adj.className} on ${moment(adj.date).format(
+                "DD MMM YYYY"
+              )}, Period ${adj.period}. ${leaveRequest.employeeId.name} on approved leave. Please check timetable.`
             );
             adj.notificationStatus = "sent";
             substituteNotificationsSent++;
             console.log(`✅ NOTIFICATION SENT to ${substituteUser.name}`);
           }
 
-          // ✅ OPTIONAL: Try timetable update (non-blocking)
+          // Optional timetable update
           try {
-            if (adj.semester) {  // Only if semester exists
+            if (adj.semester) {
               const day = moment(adj.date).format("dddd");
               const timetable = await Timetable.findOne({
                 departmentType: adj.departmentId,
                 className: adj.className,
                 semester: adj.semester,
               });
-              
+
               if (timetable) {
                 const idx = timetable.timetable.findIndex(
-                  p => p.day === day && p.period === adj.period
+                  (p) => p.day === day && p.period === adj.period
                 );
                 if (idx !== -1) {
                   timetable.timetable[idx].faculty = substituteFacultyId;
                   await timetable.save();
-                  console.log(`✅ Timetable UPDATED`);
+                  console.log("✅ Timetable UPDATED");
                 }
               }
             } else {
-              console.log(`⚠️ Skipping timetable: missing semester`);
+              console.log("⚠️ Skipping timetable: missing semester");
             }
           } catch (timetableErr) {
-            console.error(`⚠️ Timetable failed (ignored):`, timetableErr.message);
+            console.error("⚠️ Timetable failed (ignored):", timetableErr.message);
           }
-
         } catch (notifError) {
-          console.error(`❌ Notification failed:`, notifError);
+          console.error("❌ Notification failed:", notifError);
         }
       }
 
       leaveRequest.markModified("periodAdjustments");
 
-      // Employee notification
       await createNotification(
         leaveRequest.employeeId._id,
         leaveRequest._id,
@@ -373,22 +532,23 @@ exports.directorApproveReject = async (req, res) => {
       );
 
       await leaveRequest.save();
-      
-      return res.json({ 
+
+      return res.json({
         success: true,
         message: `✅ Leave approved! ${substituteNotificationsSent} substitutes notified`,
         notificationsSent: substituteNotificationsSent,
-        leaveRequest
+        leaveRequest,
       });
     }
 
-    // REJECT logic...
+    // REJECT
     leaveRequest.status = "rejected_by_director";
     leaveRequest.directorApproval = {
       approvedBy: directorId,
       approvedAt: new Date(),
       comments: comments || "",
     };
+
     await createNotification(
       leaveRequest.employeeId._id,
       leaveRequest._id,
@@ -396,6 +556,7 @@ exports.directorApproveReject = async (req, res) => {
       "Leave Rejected",
       "Director rejected your leave request"
     );
+
     await leaveRequest.save();
     res.json({ message: "Leave rejected by Director", leaveRequest });
   } catch (err) {
@@ -403,9 +564,6 @@ exports.directorApproveReject = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
-
-
 
 // =============================
 // GET USER'S LEAVE REQUESTS
@@ -481,7 +639,7 @@ exports.getHodPendingRequests = async (req, res) => {
     }
 
     const departmentUsers = await User.find({ departmentType: hod.departmentType });
-    const departmentUserIds = departmentUsers.map(u => u._id);
+    const departmentUserIds = departmentUsers.map((u) => u._id);
 
     const leaveRequests = await LeaveRequest.find({
       status: "pending_hod",
@@ -512,7 +670,7 @@ exports.getHodDepartmentLeaveRequests = async (req, res) => {
     }
 
     const departmentUsers = await User.find({ departmentType: hod.departmentType });
-    const departmentUserIds = departmentUsers.map(u => u._id);
+    const departmentUserIds = departmentUsers.map((u) => u._id);
 
     const leaveRequests = await LeaveRequest.find({
       employeeId: { $in: departmentUserIds },
@@ -584,14 +742,16 @@ exports.hodUpdatePeriodAdjustments = async (req, res) => {
       return res.status(404).json({ message: "Leave request not found" });
     }
 
-    if (leaveRequest.employeeId.departmentType.toString() !== hod.departmentType.toString()) {
+    if (
+      leaveRequest.employeeId.departmentType.toString() !==
+      hod.departmentType.toString()
+    ) {
       return res.status(403).json({
         message:
           "Unauthorized. You can only update period adjustments for your department faculty",
       });
     }
 
-    // Validate substitutes availability
     for (const adjustment of periodAdjustments) {
       if (adjustment.substituteFacultyId) {
         const substituteLeave = await LeaveRequest.findOne({
@@ -613,11 +773,11 @@ exports.hodUpdatePeriodAdjustments = async (req, res) => {
       }
     }
 
-    leaveRequest.periodAdjustments = periodAdjustments.map(adj => ({
+    leaveRequest.periodAdjustments = periodAdjustments.map((adj) => ({
       ...adj,
       date: moment(adj.date).toDate(),
       status: adj.substituteFacultyId ? "adjusted" : "pending",
-      notificationStatus: adj.substituteFacultyId ? "pending" : "not_required", // ✅ Added
+      notificationStatus: adj.substituteFacultyId ? "pending" : "not_required",
     }));
 
     await leaveRequest.save();
@@ -720,7 +880,7 @@ exports.getDirectorDashboardStats = async (req, res) => {
       }).select("_id name email role");
 
       const facultyOnLeave = await LeaveRequest.find({
-        employeeId: { $in: faculty.map(f => f._id) },
+        employeeId: { $in: faculty.map((f) => f._id) },
         status: "approved",
         startDate: { $lte: todayEnd.toDate() },
         endDate: { $gte: today.toDate() },
@@ -728,11 +888,13 @@ exports.getDirectorDashboardStats = async (req, res) => {
         .populate("employeeId", "name email role")
         .populate("leaveTypeId", "name");
 
-      const leaveIds = new Set(facultyOnLeave.map(l => l.employeeId._id.toString()));
-      const availableFaculty = faculty.filter(f => !leaveIds.has(f._id.toString()));
-      const onLeaveFaculty = faculty.filter(f => leaveIds.has(f._id.toString()));
+      const leaveIds = new Set(
+        facultyOnLeave.map((l) => l.employeeId._id.toString())
+      );
+      const availableFaculty = faculty.filter((f) => !leaveIds.has(f._id.toString()));
+      const onLeaveFaculty = faculty.filter((f) => leaveIds.has(f._id.toString()));
 
-      const leaveDetails = facultyOnLeave.map(leave => ({
+      const leaveDetails = facultyOnLeave.map((leave) => ({
         facultyId: leave.employeeId._id,
         facultyName: leave.employeeId.name,
         facultyEmail: leave.employeeId.email,
@@ -749,7 +911,7 @@ exports.getDirectorDashboardStats = async (req, res) => {
         totalFaculty: faculty.length,
         availableFaculty: availableFaculty.length,
         facultyOnLeave: onLeaveFaculty.length,
-        availableFacultyList: availableFaculty.map(f => ({
+        availableFacultyList: availableFaculty.map((f) => ({
           facultyId: f._id,
           name: f.name,
           email: f.email,
@@ -812,7 +974,7 @@ exports.getHodDashboardStats = async (req, res) => {
     }).select("_id name email role");
 
     const facultyOnLeave = await LeaveRequest.find({
-      employeeId: { $in: faculty.map(f => f._id) },
+      employeeId: { $in: faculty.map((f) => f._id) },
       status: "approved",
       startDate: { $lte: todayEnd.toDate() },
       endDate: { $gte: today.toDate() },
@@ -820,11 +982,13 @@ exports.getHodDashboardStats = async (req, res) => {
       .populate("employeeId", "name email role")
       .populate("leaveTypeId", "name");
 
-    const leaveIds = new Set(facultyOnLeave.map(l => l.employeeId._id.toString()));
-    const availableFaculty = faculty.filter(f => !leaveIds.has(f._id.toString()));
-    const onLeaveFaculty = faculty.filter(f => leaveIds.has(f._id.toString()));
+    const leaveIds = new Set(
+      facultyOnLeave.map((l) => l.employeeId._id.toString())
+    );
+    const availableFaculty = faculty.filter((f) => !leaveIds.has(f._id.toString()));
+    const onLeaveFaculty = faculty.filter((f) => leaveIds.has(f._id.toString()));
 
-    const absenceDetails = facultyOnLeave.map(leave => ({
+    const absenceDetails = facultyOnLeave.map((leave) => ({
       facultyId: leave.employeeId._id,
       facultyName: leave.employeeId.name,
       facultyEmail: leave.employeeId.email,
@@ -838,17 +1002,17 @@ exports.getHodDashboardStats = async (req, res) => {
     }));
 
     const pendingLeaves = await LeaveRequest.countDocuments({
-      employeeId: { $in: faculty.map(f => f._id) },
+      employeeId: { $in: faculty.map((f) => f._id) },
       status: "pending_hod",
     });
 
     const approvedLeaves = await LeaveRequest.countDocuments({
-      employeeId: { $in: faculty.map(f => f._id) },
+      employeeId: { $in: faculty.map((f) => f._id) },
       status: { $in: ["approved", "pending_director"] },
     });
 
     const rejectedLeaves = await LeaveRequest.countDocuments({
-      employeeId: { $in: faculty.map(f => f._id) },
+      employeeId: { $in: faculty.map((f) => f._id) },
       status: { $in: ["rejected_by_hod", "rejected_by_director"] },
     });
 
@@ -862,7 +1026,7 @@ exports.getHodDashboardStats = async (req, res) => {
       approvedLeaves,
       rejectedLeaves,
       absenceDetails,
-      availableFacultyList: availableFaculty.map(f => ({
+      availableFacultyList: availableFaculty.map((f) => ({
         facultyId: f._id,
         name: f.name,
         email: f.email,
@@ -902,10 +1066,10 @@ exports.getDepartmentLeaveAnalytics = async (req, res) => {
       select: "name email",
     });
 
-    const validRequests = leaveRequests.filter(r => r.employeeId);
+    const validRequests = leaveRequests.filter((r) => r.employeeId);
 
     const facultyLeaveMap = {};
-    facultyList.forEach(fac => {
+    facultyList.forEach((fac) => {
       const id = fac._id.toString();
       facultyLeaveMap[id] = {
         name: fac.name,
@@ -915,7 +1079,7 @@ exports.getDepartmentLeaveAnalytics = async (req, res) => {
       };
     });
 
-    validRequests.forEach(request => {
+    validRequests.forEach((request) => {
       const id = request.employeeId._id.toString();
       if (!facultyLeaveMap[id]) {
         facultyLeaveMap[id] = {
@@ -973,6 +1137,7 @@ exports.getDirectorAllRequests = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
 // =============================
 // GET SUBSTITUTION DETAILS FOR A FACULTY
 // =============================
@@ -988,8 +1153,7 @@ exports.getSubstitutionDetailsForFaculty = async (req, res) => {
       return res.status(404).json({ message: "Leave request not found" });
     }
 
-    // Filter only those adjustments where this faculty is substitute
-    const myAdjustments = (leaveRequest.periodAdjustments || []).filter(adj => {
+    const myAdjustments = (leaveRequest.periodAdjustments || []).filter((adj) => {
       const subId =
         typeof adj.substituteFacultyId === "object"
           ? adj.substituteFacultyId?._id?.toString()
@@ -1008,7 +1172,7 @@ exports.getSubstitutionDetailsForFaculty = async (req, res) => {
       startDate: leaveRequest.startDate,
       endDate: leaveRequest.endDate,
       description: leaveRequest.description,
-      substitutions: myAdjustments.map(adj => ({
+      substitutions: myAdjustments.map((adj) => ({
         date: adj.date,
         day: adj.day,
         period: adj.period,
@@ -1024,24 +1188,23 @@ exports.getSubstitutionDetailsForFaculty = async (req, res) => {
 };
 
 // =============================
-// GET ALL SUBSTITUTIONS FOR A FACULTY (ACROSS LEAVES)
+// GET ALL SUBSTITUTIONS FOR A FACULTY
 // =============================
 exports.getMySubstitutions = async (req, res) => {
   try {
     const { facultyId } = req.params;
 
-    // Find leave requests where this faculty appears as a substitute
     const leaveRequests = await LeaveRequest.find({
       "periodAdjustments.substituteFacultyId": facultyId,
-      status: "approved", // only approved leaves
+      status: "approved",
     })
-      .populate("employeeId", "name email") // original faculty
+      .populate("employeeId", "name email")
       .sort({ startDate: 1 });
 
     const result = [];
 
     for (const lr of leaveRequests) {
-      (lr.periodAdjustments || []).forEach(adj => {
+      (lr.periodAdjustments || []).forEach((adj) => {
         if (adj.substituteFacultyId?.toString() === facultyId.toString()) {
           result.push({
             leaveRequestId: lr._id,
@@ -1067,3 +1230,238 @@ exports.getMySubstitutions = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+// =============================
+// FACULTY MONTH-WISE LEAVE USAGE
+// =============================
+// GET /api/leave-request/faculty/:employeeId/usage?month=YYYY-MM
+// If month missing, default = current month
+exports.getFacultyLeaveUsageByMonth = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { month } = req.query; // format: YYYY-MM
+
+    // 1) Resolve month range
+    let startOfMonth, endOfMonth;
+    if (month) {
+      // month like "2025-03"
+      const [yearStr, monthStr] = month.split("-");
+      const year = parseInt(yearStr, 10);
+      const mIndex = parseInt(monthStr, 10) - 1; // 0-based
+      startOfMonth = moment({ year, month: mIndex, day: 1 }).startOf("day");
+      endOfMonth = moment(startOfMonth).endOf("month");
+    } else {
+      // current month
+      startOfMonth = moment().startOf("month");
+      endOfMonth = moment().endOf("month");
+    }
+
+    // 2) Load allocation per leave type for this employee
+    const allocations = await EmployeeLeave.find({ employeeId }).populate(
+      "leaveTypeId",
+      "name leaveAction"
+    );
+
+    // Build map: leaveTypeId -> { totalAvailableYear, usedYear, remainingYear }
+    const allocationMap = {};
+    allocations.forEach((al) => {
+      if (!al.leaveTypeId) return; // safety
+
+      const total = (al.totalLeaves || 0) + (al.carryForwardLeaves || 0);
+      const used = al.usedLeaves || 0;
+      const key = al.leaveTypeId._id.toString();
+
+      allocationMap[key] = {
+        leaveTypeId: al.leaveTypeId._id,
+        leaveTypeName: al.leaveTypeId.name,
+        leaveAction: al.leaveTypeId.leaveAction, // DEDUCT / ADD
+        totalAvailableYear: total,
+        usedYear: used,
+        remainingYear: Math.max(total - used, 0),
+      };
+    });
+
+    // 3) Load APPROVED leave requests in this month for this employee
+    const approvedLeaves = await LeaveRequest.find({
+      employeeId,
+      status: "approved",
+      endDate: { $gte: startOfMonth.toDate() },
+      startDate: { $lte: endOfMonth.toDate() },
+    }).populate("leaveTypeId", "name leaveAction");
+
+    // 4) Aggregate "days taken in month" per leave type
+    const monthTakenMap = {}; // leaveTypeId -> daysInMonth
+    approvedLeaves.forEach((lr) => {
+      if (!lr.leaveTypeId) {
+        // corrupted / legacy record without type → skip
+        return;
+      }
+
+      const ltId = lr.leaveTypeId._id
+        ? lr.leaveTypeId._id.toString()
+        : lr.leaveTypeId.toString();
+
+      const start = moment(lr.startDate).isBefore(startOfMonth)
+        ? startOfMonth.clone()
+        : moment(lr.startDate);
+      const end = moment(lr.endDate).isAfter(endOfMonth)
+        ? endOfMonth.clone()
+        : moment(lr.endDate);
+
+      const daysInMonth = end.diff(start, "days") + 1;
+      if (!monthTakenMap[ltId]) monthTakenMap[ltId] = 0;
+      monthTakenMap[ltId] += daysInMonth;
+    });
+
+    // 5) Build response per leave type
+    const result = [];
+
+    // Include all allocated leave types
+    Object.keys(allocationMap).forEach((ltId) => {
+      const alloc = allocationMap[ltId];
+      const monthTaken = monthTakenMap[ltId] || 0;
+
+      const remainingMonth = Math.max(alloc.remainingYear - monthTaken, 0);
+
+      result.push({
+        leaveTypeId: alloc.leaveTypeId,
+        leaveTypeName: alloc.leaveTypeName,
+        leaveAction: alloc.leaveAction,
+        totalAvailableYear: alloc.totalAvailableYear,
+        usedYear: alloc.usedYear,
+        remainingYear: alloc.remainingYear,
+        monthKey: month || startOfMonth.format("YYYY-MM"),
+        takenInMonth: monthTaken,
+        remainingInMonth: remainingMonth,
+      });
+    });
+
+    // Also include leave types that had usage but no allocation record
+    Object.keys(monthTakenMap).forEach((ltId) => {
+      if (!allocationMap[ltId]) {
+        const lrSample = approvedLeaves.find((lr) => {
+          if (!lr.leaveTypeId) return false;
+          const idStr = lr.leaveTypeId._id
+            ? lr.leaveTypeId._id.toString()
+            : lr.leaveTypeId.toString();
+          return idStr === ltId;
+        });
+
+        const ltName = lrSample?.leaveTypeId?.name || "Unknown";
+        const ltAction = lrSample?.leaveTypeId?.leaveAction || "DEDUCT";
+        const monthTaken = monthTakenMap[ltId];
+
+        result.push({
+          leaveTypeId: ltId,
+          leaveTypeName: ltName,
+          leaveAction: ltAction,
+          totalAvailableYear: 0,
+          usedYear: monthTaken,
+          remainingYear: 0,
+          monthKey: month || startOfMonth.format("YYYY-MM"),
+          takenInMonth: monthTaken,
+          remainingInMonth: 0,
+        });
+      }
+    });
+
+    return res.json({
+      employeeId,
+      month: month || startOfMonth.format("YYYY-MM"),
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error fetching faculty leave usage by month:", error);
+    res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
+  }
+};
+// ADMIN MONTHLY ATTENDANCE REPORT PER FACULTY
+// GET /api/admin/monthly-attendance?year=2025&month=3
+exports.getMonthlyAttendanceReport = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year, 10);
+    const month = parseInt(req.query.month, 10); // 1-12
+
+    if (!year || !month || month < 1 || month > 12) {
+      return res.status(400).json({ message: "Invalid year or month" });
+    }
+
+    const startOfMonth = moment([year, month - 1, 1]).startOf("day");
+    const endOfMonth = startOfMonth.clone().endOf("month");
+
+    // 1) Load all active faculty (teaching, non-teaching, hod)
+    const facultyList = await User.find({
+      role: { $in: ["teaching", "non-teaching", "hod"] },
+    }).select("name email role departmentType");
+
+    // 2) Load all APPROVED leaves intersecting month
+    const leaves = await LeaveRequest.find({
+      status: "approved",
+      endDate: { $gte: startOfMonth.toDate() },
+      startDate: { $lte: endOfMonth.toDate() },
+    }).populate("leaveTypeId", "name leaveAction");
+
+    // 3) Helper: classify leave type that should be excluded (OOD, CL, EL)
+    const isExcludedLeaveType = (ltName = "") => {
+      const n = ltName.toUpperCase();
+      return n.includes("OOD") || n.includes("CL") || n.includes("EL");
+    };
+
+    // 4) Aggregate leave days per faculty (excluding OOD/CL/EL, only DEDUCT types)
+    const leaveDaysByFaculty = {}; // facultyId -> daysOfLeave
+
+    leaves.forEach((lr) => {
+      const leaveType = lr.leaveTypeId;
+      if (!leaveType) return;
+
+      if (leaveType.leaveAction !== "DEDUCT") return;
+      if (isExcludedLeaveType(leaveType.name)) return;
+
+      const lrStart = moment.max(moment(lr.startDate).startOf("day"), startOfMonth);
+      const lrEnd = moment.min(moment(lr.endDate).endOf("day"), endOfMonth);
+
+      const daysInMonth = lrEnd.diff(lrStart, "days") + 1;
+      if (daysInMonth <= 0) return;
+
+      const key = lr.employeeId.toString();
+      if (!leaveDaysByFaculty[key]) leaveDaysByFaculty[key] = 0;
+      leaveDaysByFaculty[key] += daysInMonth;
+    });
+
+    // 5) Holidays in month (for now, assume 0 or plug your own holiday collection)
+    const totalDaysInMonth = endOfMonth.date();
+    const holidaysInMonth = 0; // replace with real holiday count if you have it
+
+    const result = facultyList.map((fac) => {
+      const facId = fac._id.toString();
+      const leaveDays = leaveDaysByFaculty[facId] || 0;
+
+      const totalPresent =
+        totalDaysInMonth - holidaysInMonth - leaveDays;
+
+      return {
+        facultyId: facId,
+        name: fac.name,
+        email: fac.email,
+        role: fac.role,
+        departmentId: fac.departmentType,
+        year,
+        month,
+        totalDaysInMonth,
+        holidaysInMonth,
+        leaveDays,
+        totalPresent: totalPresent < 0 ? 0 : totalPresent,
+      };
+    });
+
+    return res.json({ year, month, data: result });
+  } catch (error) {
+    console.error("Error fetching monthly attendance report", error);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
+  }
+};
+
+

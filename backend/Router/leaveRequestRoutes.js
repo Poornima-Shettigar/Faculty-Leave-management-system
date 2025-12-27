@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const leaveRequestController = require("../Controller/leaveRequestController");
+const { get } = require("mongoose");
 
 // Apply leave request
 router.post("/apply", leaveRequestController.applyLeaveRequest);
+router.get("/admin/monthly-attendance", leaveRequestController.getMonthlyAttendanceReport);
 
 // Get user's leave requests
 router.get("/my-requests/:employeeId", leaveRequestController.getMyLeaveRequests);
@@ -34,7 +36,6 @@ router.get(
 );
 
 
-
 // Dashboard Stats
 router.get("/director/stats", leaveRequestController.getDirectorDashboardStats);
 router.get("/hod/stats/:departmentId", leaveRequestController.getHodDashboardStats);
@@ -46,6 +47,10 @@ router.get("/analytics/department/:departmentId", leaveRequestController.getDepa
 // ADD THIS LINE BELOW:
 router.get("/director/all/:directorId", leaveRequestController.getDirectorAllRequests); 
 // router.put("/director/action/:leaveRequestId", leaveRequestController.directorApproveReject);
+router.get(
+  "/faculty/:employeeId/usage",
+  leaveRequestController.getFacultyLeaveUsageByMonth
+);
 module.exports = router;
 
 

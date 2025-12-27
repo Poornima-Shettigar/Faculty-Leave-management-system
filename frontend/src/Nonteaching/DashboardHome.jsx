@@ -10,46 +10,127 @@ function DashboardHome() {
   const [leaveBalance, setLeaveBalance] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
 
+  // Month/year for filter
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()); // 0-11
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Usage from backend + month summary map
+  const [leaveUsage, setLeaveUsage] = useState([]); // aggregated rows from API
+  const [monthSummary, setMonthSummary] = useState({}); // { "YYYY-MM": { [leaveTypeId]: { name, days } } }
+
+const [adminYear, setAdminYear] = useState(new Date().getFullYear());
+const [adminMonth, setAdminMonth] = useState(new Date().getMonth()); // 0-11
+const [adminAttendance, setAdminAttendance] = useState([]);
+const [adminLoading, setAdminLoading] = useState(false);
+const [adminError, setAdminError] = useState("");
+
+
   /* ----------- LOAD BASIC COUNTS ----------- */
   useEffect(() => {
     loadDepartmentCount();
     loadFacultyCount();
   }, []);
+useEffect(() => {
+  if (role === "admin") {
+    loadAdminAttendance();
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [role, adminMonth, adminYear]);
 
   /* ----------- ROLE BASED STATS ----------- */
   useEffect(() => {
     if (role === "admin") loadAdminStats();
+
     if (role === "hod") {
       loadHodStats();
-      loadFacultyLeaveBalance(); // Also load leave balance for HOD
+      loadFacultyLeaveBalance();
+      loadFacultyLeaveUsage(); // HOD sees own usage as faculty
     }
-    if (role === "teaching" || role === "non-teaching") loadFacultyLeaveBalance();
+
+    if (role === "teaching" || role === "non-teaching") {
+      loadFacultyLeaveBalance();
+      loadFacultyLeaveUsage(); // faculty usage
+    }
+
     if (role === "director") loadDirectorStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
+  // Reload monthly usage if month/year changes
+  useEffect(() => {
+    if (role === "hod" || role === "teaching" || role === "non-teaching") {
+      loadFacultyLeaveUsage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, selectedYear]);
+
   /* ----------- API FUNCTIONS ----------- */
+  const loadAdminAttendance = async () => {
+  try {
+    setAdminLoading(true);
+    setAdminError("");
+    const monthParam = adminMonth + 1; // backend expects 1-12
+
+    const res = await axios.get(
+      "http://localhost:5000/api/leave-request/admin/monthly-attendance",
+      {
+        params: { year: adminYear, month: monthParam },
+      }
+    );
+
+    const payload = res.data || {};
+    setAdminAttendance(Array.isArray(payload.data) ? payload.data : []);
+  } catch (err) {
+    console.error(err);
+    setAdminError(
+      err.response?.data?.message ||
+        "Failed to load monthly attendance report"
+    );
+    setAdminAttendance([]);
+  } finally {
+    setAdminLoading(false);
+  }
+};
+
 
   const loadDepartmentCount = async () => {
-    const res = await axios.get("http://localhost:5000/api/department/count");
-    setStats((prev) => ({ ...prev, totalDept: res.data.totalDepartments }));
+    try {
+      const res = await axios.get("http://localhost:5000/api/department/count");
+      setStats((prev) => ({ ...prev, totalDept: res.data.totalDepartments }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadFacultyCount = async () => {
-    const res = await axios.get("http://localhost:5000/api/faculty/count");
-    setStats((prev) => ({ ...prev, totalFaculties: res.data.totalFaculties }));
+    try {
+      const res = await axios.get("http://localhost:5000/api/faculty/count");
+      setStats((prev) => ({ ...prev, totalFaculties: res.data.totalFaculties }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadAdminStats = async () => {
-    const res = await axios.get("http://localhost:5000/api/faculty/admin/stats");
-    setStats((prev) => ({ ...prev, departmentStats: res.data }));
+    try {
+      const res = await axios.get("http://localhost:5000/api/faculty/admin/stats");
+      setStats((prev) => ({ ...prev, departmentStats: res.data }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadHodStats = async () => {
-    const deptId = user.departmentType?._id || user.departmentType || user.department;
-    const res = await axios.get(
-      `http://localhost:5000/api/leave-request/hod/stats/${deptId}`
-    );
-    setStats((prev) => ({ ...prev, ...res.data }));
+    try {
+      const deptId =
+        user.departmentType?._id || user.departmentType || user.department;
+      const res = await axios.get(
+        `http://localhost:5000/api/leave-request/hod/stats/${deptId}`
+      );
+      setStats((prev) => ({ ...prev, ...res.data }));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const loadFacultyLeaveBalance = async () => {
@@ -66,8 +147,52 @@ function DashboardHome() {
   };
 
   const loadDirectorStats = async () => {
-    const res = await axios.get("http://localhost:5000/api/leave-request/director/stats");
-    setStats((prev) => ({ ...prev, ...res.data }));
+    try {
+      const res = await axios.get(
+        "http://localhost:5000/api/leave-request/director/stats"
+      );
+      setStats((prev) => ({ ...prev, ...res.data }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // NEW: use backend aggregated usage per month
+  const loadFacultyLeaveUsage = async () => {
+    try {
+      const employeeId = user._id || user.id;
+      // backend expects month as "YYYY-MM"
+      const monthStr = `${selectedYear}-${String(selectedMonth + 1).padStart(
+        2,
+        "0"
+      )}`;
+
+      const res = await axios.get(
+        `http://localhost:5000/api/leave-request/faculty/${employeeId}/usage`,
+        { params: { month: monthStr } }
+      );
+
+      const payload = res.data || {};
+      const usageArray = Array.isArray(payload.data) ? payload.data : [];
+
+      // Build { "YYYY-MM": { [leaveTypeId]: { name, days } } }
+      const summary = {};
+      usageArray.forEach((item) => {
+        const key = item.monthKey; // "YYYY-MM"
+        if (!summary[key]) summary[key] = {};
+        summary[key][item.leaveTypeId] = {
+          name: item.leaveTypeName,
+          days: item.takenInMonth,
+        };
+      });
+
+      setLeaveUsage(usageArray);
+      setMonthSummary(summary);
+    } catch (err) {
+      console.error(err);
+      setLeaveUsage([]);
+      setMonthSummary({});
+    }
   };
 
   /* ----------- UI COMPONENTS ----------- */
@@ -79,196 +204,484 @@ function DashboardHome() {
     </div>
   );
 
-  /* ----------- FACULTY DASHBOARD ----------- */
+  /* ----------- SIMPLE ADMIN DASHBOARD (stub) ----------- */
+ const AdminDashboard = () => {
+  const departmentStats = stats.departmentStats || [];
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
 
-  const FacultyDashboard = () => (
-    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-      <div className="p-6 border-b border-gray-100">
-        <h2 className="text-xl font-semibold text-gray-800">
-          Leave Balance – Current Academic Year
-        </h2>
+  return (
+    <div className="space-y-8">
+      {/* Top stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Total Faculties" value={stats.totalFaculties} />
+        <StatCard title="Total Departments" value={stats.totalDept} />
       </div>
 
-      {leaveBalance.length === 0 ? (
-        <div className="p-6 text-gray-500">No leave data found.</div>
+      {/* Existing department stats table */}
+      {departmentStats.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-md p-6 text-gray-500">
+          No department stats available.
+        </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Leave Type
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Department
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Effect
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Teaching Staff
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Allowed
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Carry Forward
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Total Available
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Used
-                </th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Remaining
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-48">
-                  Usage Status
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Non-Teaching Staff
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {leaveBalance.map((leave) => {
-                const total = leave.totalAvailable || 0;
-                const remaining = leave.remainingLeaves || 0;
-                const percentage = total > 0 ? (remaining / total) * 100 : 0;
-                const barColor =
-                  percentage > 60
-                    ? "bg-green-500"
-                    : percentage > 30
-                    ? "bg-yellow-400"
-                    : "bg-red-500";
-
-                return (
-                  <tr
-                    key={leave.leaveTypeId}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-gray-900">
-                        {leave.leaveTypeName}
-                      </div>
-                    </td>
-
-                    {/* ADD vs DEDUCT indicator */}
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-xs">
-                      <span
-                        className={
-                          leave.leaveEffect === "ADD"
-                            ? "inline-flex px-2 py-1 rounded-full bg-purple-100 text-purple-700"
-                            : "inline-flex px-2 py-1 rounded-full bg-blue-100 text-blue-700"
-                        }
-                      >
-                        {leave.leaveEffect === "ADD" ? "Add (Credit)" : "Deduct"}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                      {/* For ADD types allowedLeaves is just 0 / N/A */}
-                      {leave.leaveEffect === "ADD"
-                        ? "N/A"
-                        : leave.allowedLeaves}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
-                      {leave.carryForwardLeaves}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium text-gray-800">
-                      {leave.totalAvailable}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-red-600">
-                      {leave.usedLeaves}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">
-                      {leave.remainingLeaves}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[100px]">
-                          <div
-                            className={`${barColor} h-2 rounded-full transition-all duration-500`}
-                            style={{
-                              width: `${Math.max(
-                                0,
-                                Math.min(100, percentage)
-                              )}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-xs font-medium text-gray-500">
-                          {Math.round(percentage)}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {departmentStats.map((dept) => (
+                <tr key={dept.departmentId} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {dept.departmentName}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {dept.teachingStaff || 0}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {dept.nonTeachingStaff || 0}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
-    </div>
-  );
 
-  /* ----------- ROLE DASHBOARDS ----------- */
-
-  const AdminDashboard = () => {
-    const departmentStats = stats.departmentStats || [];
-
-    const totalTeaching = departmentStats.reduce(
-      (sum, dept) => sum + (Number(dept.teachingStaff) || 0),
-      0
-    );
-    const totalNonTeaching = departmentStats.reduce(
-      (sum, dept) => sum + (Number(dept.nonTeachingStaff) || 0),
-      0
-    );
-
-    return (
-      <div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <StatCard title="Total Faculties" value={stats.totalFaculties} />
-          <StatCard title="Total Departments" value={stats.totalDept} />
-          <StatCard title="Total Teaching Staff" value={totalTeaching} />
-          <StatCard title="Total Non-Teaching Staff" value={totalNonTeaching} />
+      {/* NEW: Monthly Attendance Report */}
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+          <h2 className="text-xl font-semibold text-gray-800">
+            📅 Monthly Attendance (Admin)
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">View for:</span>
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              value={adminMonth}
+              onChange={(e) => setAdminMonth(parseInt(e.target.value, 10))}
+            >
+              {months.map((m, i) => (
+                <option key={i} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              value={adminYear}
+              onChange={(e) =>
+                setAdminYear(parseInt(e.target.value, 10))
+              }
+            >
+              {[2023, 2024, 2025, 2026].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Department-wise Staff Distribution
-          </h2>
-          <div className="bg-white rounded-xl shadow-md overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Department
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Staff
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Non-Teaching Staff
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {departmentStats.map((dept) => (
-                  <tr key={dept.departmentId} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {dept.departmentName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {dept.teachingStaff || 0}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {dept.nonTeachingStaff || 0}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {dept.total || 0}
-                    </td>
+        <div className="p-6">
+          {adminError && (
+            <div className="mb-4 p-3 rounded bg-red-100 text-red-800 text-sm">
+              {adminError}
+            </div>
+          )}
+
+          {adminLoading ? (
+            <p className="text-gray-500 text-sm">Loading attendance...</p>
+          ) : adminAttendance.length === 0 ? (
+            <p className="text-gray-500 text-sm">
+              No attendance data found for this month.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">
+                      Faculty
+                    </th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-500 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-500 uppercase tracking-wider">
+                      Total Days
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-500 uppercase tracking-wider">
+                      Holidays
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-500 uppercase tracking-wider">
+                      Leave Days
+                      <span className="block text-[10px] text-gray-400">
+                        (excl. OOD/CL/EL)
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-center font-medium text-gray-500 uppercase tracking-wider">
+                      Total Present
+                    </th>
                   </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {adminAttendance.map((row) => (
+                    <tr key={row.facultyId} className="hover:bg-gray-50">
+                      <td className="px-4 py-2 whitespace-nowrap font-medium text-gray-900">
+                        {row.name}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-gray-500">
+                        {row.email}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-center text-gray-600">
+                        {row.role}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-center text-gray-700">
+                        {row.totalDaysInMonth}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-center text-gray-700">
+                        {row.holidaysInMonth}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-center text-gray-700">
+                        {row.leaveDays}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-center font-bold text-green-700">
+                        {row.totalPresent}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+  /* ----------- FACULTY DASHBOARD ----------- */
+
+  const FacultyDashboard = () => {
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+
+    // backend monthKey is "YYYY-MM"
+    const monthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(
+      2,
+      "0"
+    )}`;
+    const currentMonthData = monthSummary[monthKey] || {};
+
+    const getMonthLabel = (idx) => months[idx];
+
+    return (
+      <div className="space-y-8">
+        {/* Monthly Leave Stats Section */}
+        <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+            <h2 className="text-xl font-semibold text-gray-800">
+              📅 Monthly Leave Overview
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">View for:</span>
+              <select
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
+              >
+                {months.map((m, i) => (
+                  <option key={i} value={i}>
+                    {m}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+              <select
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={selectedYear}
+                onChange={(e) =>
+                  setSelectedYear(parseInt(e.target.value, 10))
+                }
+              >
+                {[2023, 2024, 2025, 2026].map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {leaveBalance.map((leave, idx) => {
+                const isAddType = leave.leaveEffect === "ADD";
+
+                // Get monthly usage for this specific leave type from aggregated map
+                const usageInfo = currentMonthData[leave.leaveTypeId];
+                const monthlyTaken = usageInfo ? usageInfo.days : 0;
+
+                const yearlyRemaining = leave.remainingLeaves;
+
+                return (
+                  <div
+                    key={idx}
+                    className="bg-gray-50 rounded-xl p-4 border border-gray-200"
+                  >
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3 flex justify-between">
+                      {leave.leaveTypeName}
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full ${
+                          isAddType
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {isAddType ? "Credit" : "Deduct"}
+                      </span>
+                    </h3>
+
+                    <div className="flex justify-between items-end">
+                      <div>
+                        <p className="text-xs text-gray-500">
+                          {isAddType ? "Added in " : "Taken in "}
+                          {getMonthLabel(selectedMonth)}
+                        </p>
+                        <p
+                          className={`text-2xl font-bold ${
+                            isAddType ? "text-indigo-600" : "text-orange-600"
+                          }`}
+                        >
+                          {monthlyTaken}
+                        </p>
+                      </div>
+
+                      {!isAddType && (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            Yearly Balance
+                          </p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {yearlyRemaining}
+                          </p>
+                        </div>
+                      )}
+                      {isAddType && (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            Total Accumulated
+                          </p>
+                          <p className="text-2xl font-bold text-indigo-600">
+                            {leave.usedLeaves}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {!isAddType && leave.totalAvailable > 0 && (
+                      <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-500 h-1.5 rounded-full"
+                          style={{
+                            width: `${
+                              (leave.usedLeaves / leave.totalAvailable) * 100
+                            }%`,
+                          }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {leaveBalance.length === 0 && (
+              <p className="text-gray-500 text-center py-4">
+                No leave types assigned.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Yearly Overview Table */}
+        <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-800">
+              📊 Yearly Leave Balance
+            </h2>
+          </div>
+
+          {leaveBalance.length === 0 ? (
+            <div className="p-6 text-gray-500">No leave data found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Leave Type
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Effect
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Allowed
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Carry Forward
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Total Available
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Total Used / Added
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      Remaining
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-48">
+                      Usage Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {leaveBalance.map((leave) => {
+                    const isAddType = leave.leaveEffect === "ADD";
+                    const total = leave.totalAvailable || 0;
+                    const remaining = leave.remainingLeaves || 0;
+                    const used = leave.usedLeaves || 0;
+
+                    let percentage = 0;
+                    if (!isAddType && total > 0) {
+                      percentage = (remaining / total) * 100;
+                    } else if (isAddType) {
+                      percentage = 100;
+                    }
+
+                    const barColor =
+                      percentage > 60
+                        ? "bg-green-500"
+                        : percentage > 30
+                        ? "bg-yellow-400"
+                        : "bg-red-500";
+
+                    return (
+                      <tr
+                        key={leave.leaveTypeId}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-gray-900">
+                            {leave.leaveTypeName}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-xs">
+                          <span
+                            className={
+                              isAddType
+                                ? "inline-flex px-2 py-1 rounded-full bg-purple-100 text-purple-700"
+                                : "inline-flex px-2 py-1 rounded-full bg-blue-100 text-blue-700"
+                            }
+                          >
+                            {isAddType ? "Add (Credit)" : "Deduct"}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
+                          {isAddType ? "-" : leave.allowedLeaves}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-600">
+                          {isAddType ? "-" : leave.carryForwardLeaves}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium text-gray-800">
+                          {isAddType ? "-" : leave.totalAvailable}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold">
+                          <span
+                            className={
+                              isAddType ? "text-indigo-600" : "text-red-600"
+                            }
+                          >
+                            {used}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-green-600">
+                          {isAddType ? "-" : leave.remainingLeaves}
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {!isAddType ? (
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-[100px]">
+                                <div
+                                  className={`${barColor} h-2 rounded-full transition-all duration-500`}
+                                  style={{
+                                    width: `${Math.max(
+                                      0,
+                                      Math.min(100, percentage)
+                                    )}%`,
+                                  }}
+                                ></div>
+                              </div>
+                              <span className="text-xs font-medium text-gray-500">
+                                {Math.round(percentage)}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              Accumulating
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -288,7 +701,10 @@ function DashboardHome() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatCard title="Total Faculty" value={stats.totalFaculty} />
           <StatCard title="Available Faculty" value={stats.availableFaculty} />
-          <StatCard title="Faculty on Leave Today" value={stats.facultyOnLeave} />
+          <StatCard
+            title="Faculty on Leave Today"
+            value={stats.facultyOnLeave}
+          />
           <StatCard title="Pending Leaves" value={stats.pendingLeaves} />
         </div>
 
@@ -362,7 +778,9 @@ function DashboardHome() {
 
         <div
           className="mt-6 bg-blue-600 text-white text-center py-4 rounded-xl cursor-pointer hover:bg-blue-700 transition"
-          onClick={() => (window.location.href = "/hod/dashboard/approve-leave")}
+          onClick={() =>
+            (window.location.href = "/hod/dashboard/approve-leave")
+          }
         >
           Review Leave Requests →
         </div>
@@ -417,7 +835,10 @@ function DashboardHome() {
               {departmentStats.map((dept) => {
                 const availabilityPercent =
                   dept.totalFaculty > 0
-                    ? ((dept.availableFaculty / dept.totalFaculty) * 100).toFixed(1)
+                    ? (
+                        (dept.availableFaculty / dept.totalFaculty) *
+                        100
+                      ).toFixed(1)
                     : 0;
 
                 return (
@@ -436,7 +857,9 @@ function DashboardHome() {
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Total Faculty:</span>
-                        <span className="font-semibold">{dept.totalFaculty}</span>
+                        <span className="font-semibold">
+                          {dept.totalFaculty}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-green-600">Available:</span>
@@ -495,7 +918,8 @@ function DashboardHome() {
                 selectedDepartment.leaveDetails.length > 0 && (
                   <div className="mb-6">
                     <h4 className="font-semibold text-gray-700 mb-3 text-red-600">
-                      Faculty on Leave ({selectedDepartment.leaveDetails.length})
+                      Faculty on Leave (
+                      {selectedDepartment.leaveDetails.length})
                     </h4>
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
@@ -519,25 +943,31 @@ function DashboardHome() {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {selectedDepartment.leaveDetails.map((leave, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 text-sm text-gray-900">
-                                {leave.facultyName}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-500">
-                                {leave.facultyEmail}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-500">
-                                {leave.leaveType}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-500">
-                                {new Date(leave.startDate).toLocaleDateString()}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-500">
-                                {new Date(leave.endDate).toLocaleDateString()}
-                              </td>
-                            </tr>
-                          ))}
+                          {selectedDepartment.leaveDetails.map(
+                            (leave, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="px-4 py-2 text-sm text-gray-900">
+                                  {leave.facultyName}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-500">
+                                  {leave.facultyEmail}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-500">
+                                  {leave.leaveType}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-500">
+                                  {new Date(
+                                    leave.startDate
+                                  ).toLocaleDateString()}
+                                </td>
+                                <td className="px-4 py-2 text-sm text-gray-500">
+                                  {new Date(
+                                    leave.endDate
+                                  ).toLocaleDateString()}
+                                </td>
+                              </tr>
+                            )
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -553,20 +983,24 @@ function DashboardHome() {
                       {selectedDepartment.availableFacultyList.length})
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {selectedDepartment.availableFacultyList.map((faculty) => (
-                        <div
-                          key={faculty.facultyId}
-                          className="bg-green-50 border border-green-200 rounded-lg p-3"
-                        >
-                          <p className="font-medium text-gray-900">
-                            {faculty.name}
-                          </p>
-                          <p className="text-xs text-gray-500">{faculty.email}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {faculty.role}
-                          </p>
-                        </div>
-                      ))}
+                      {selectedDepartment.availableFacultyList.map(
+                        (faculty) => (
+                          <div
+                            key={faculty.facultyId}
+                            className="bg-green-50 border border-green-200 rounded-lg p-3"
+                          >
+                            <p className="font-medium text-gray-900">
+                              {faculty.name}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {faculty.email}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {faculty.role}
+                            </p>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
                 )}

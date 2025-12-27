@@ -101,7 +101,7 @@ const handleNotificationClick = (notification) => {
 
   // ============== substitute assignment navigation ============
   if (notification.type === "substitute_assignment") {
-    window.location.href = "/faculty/dashboard/substitute-classes";
+    window.location.href = "/faculty/dashboard/substitution-details";
     return;
   }
 

@@ -1,24 +1,26 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import moment from "moment"; // Useful for formatting dates in the table
+import moment from "moment";
 
 function LeaveTypeManagement() {
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [search, setSearch] = useState("");
-
   const [editingLeave, setEditingLeave] = useState(null);
+
   const [editForm, setEditForm] = useState({
     name: "",
     allowedLeaves: "",
     roles: [],
     isForwarding: false,
-    isHalfDayAllowed: false, // NEW
-    startDate: "", // NEW
-    endDate: "",   // NEW
+    isHalfDayAllowed: false,
+    leaveEffect: "DEDUCT",
+    startDate: "",
+    endDate: "",
   });
 
   const roleList = ["admin", "teaching", "non-teaching", "hod", "director"];
 
+  /* ================= FETCH ================= */
   const fetchLeaveTypes = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/leaveType/list");
@@ -32,49 +34,79 @@ function LeaveTypeManagement() {
     fetchLeaveTypes();
   }, []);
 
+  /* ================= SEARCH ================= */
   const handleSearch = async (value) => {
     setSearch(value);
     if (!value.trim()) return fetchLeaveTypes();
-    const res = await axios.get(`http://localhost:5000/api/leaveType/search?q=${value}`);
+
+    const res = await axios.get(
+      `http://localhost:5000/api/leaveType/search?q=${value}`
+    );
     setLeaveTypes(res.data);
   };
 
+  /* ================= DELETE ================= */
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure? This will not remove existing allocated balances, only the type definition.")) return;
+    if (!window.confirm("Are you sure?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/leaveType/delete/${id}`);
+      await axios.delete(
+        `http://localhost:5000/api/leaveType/delete/${id}`
+      );
       fetchLeaveTypes();
     } catch (err) {
       console.error(err);
     }
   };
-const openEditModal = (lt) => {
+
+  /* ================= OPEN EDIT ================= */
+  const openEditModal = (lt) => {
     setEditingLeave(lt._id);
+
     setEditForm({
-      name: lt.name,
-      allowedLeaves: lt.allowedLeaves,
-      roles: lt.roles,
-      isForwarding: lt.isForwarding,
+      name: lt.name || "",
+      allowedLeaves: lt.allowedLeaves || "",
+      roles: lt.roles || [],
+      isForwarding: lt.isForwarding || false,
       isHalfDayAllowed: lt.isHalfDayAllowed || false,
-      // Use moment to force the exact YYYY-MM-DD format the date input requires
-      startDate: lt.startDate ? moment(lt.startDate).format("YYYY-MM-DD") : "",
-      endDate: lt.endDate ? moment(lt.endDate).format("YYYY-MM-DD") : "",
+      leaveEffect: lt.leaveEffect || "DEDUCT",
+      startDate: lt.startDate
+        ? moment(lt.startDate).format("YYYY-MM-DD")
+        : "",
+      endDate: lt.endDate
+        ? moment(lt.endDate).format("YYYY-MM-DD")
+        : "",
     });
   };
 
+  /* ================= UPDATE ================= */
   const handleUpdate = async (e) => {
     e.preventDefault();
+
+    if (
+      !editForm.name ||
+      !editForm.allowedLeaves ||
+      !editForm.roles.length ||
+      !editForm.startDate ||
+      !editForm.endDate
+    ) {
+      return alert("Please fill all required fields");
+    }
+
     try {
-      await axios.put(`http://localhost:5000/api/leaveType/update/${editingLeave}`, editForm);
-      alert("Leave Type Updated Successfully");
+      await axios.put(
+        `http://localhost:5000/api/leaveType/update/${editingLeave}`,
+        editForm
+      );
+      alert("Leave Policy Updated Successfully");
       setEditingLeave(null);
       fetchLeaveTypes();
     } catch (err) {
       console.error(err);
-      alert("Error updating leave type");
+      alert("Error updating leave policy");
     }
   };
 
+  /* ================= ROLE TOGGLE ================= */
   const toggleRole = (role) => {
     setEditForm((prev) => ({
       ...prev,
@@ -90,55 +122,70 @@ const openEditModal = (lt) => {
         Policy & Leave Management
       </h1>
 
-      {/* Search */}
+      {/* SEARCH */}
       <div className="flex justify-center mb-8">
         <input
           type="text"
           value={search}
           onChange={(e) => handleSearch(e.target.value)}
           placeholder="Search policy name..."
-          className="w-full max-w-md p-4 rounded-2xl border shadow-sm focus:ring-2 focus:ring-blue-400 outline-none"
+          className="w-full max-w-md p-4 rounded-2xl border shadow-sm"
         />
       </div>
 
-      {/* Table */}
+      {/* TABLE */}
       <div className="overflow-x-auto shadow-2xl rounded-2xl">
-        <table className="w-full bg-white border-collapse">
+        <table className="w-full bg-white">
           <thead className="bg-blue-900 text-white">
             <tr>
               <th className="p-4 text-left">Name</th>
               <th className="p-4 text-left">Qty</th>
-              <th className="p-4 text-left">Half-Day</th>
-              <th className="p-4 text-left">Validity Range</th>
-              <th className="p-4 text-left">Roles</th>
+              <th className="p-4">Half Day</th>
+              <th className="p-4">Effect</th>
+              <th className="p-4">Validity</th>
+              <th className="p-4">Roles</th>
               <th className="p-4 text-center">Actions</th>
             </tr>
           </thead>
+
           <tbody>
             {leaveTypes.map((lt) => (
-              <tr key={lt._id} className="border-b hover:bg-blue-50 transition">
-                <td className="p-4 font-bold text-gray-800">{lt.name}</td>
-                <td className="p-4 text-gray-600">{lt.allowedLeaves}</td>
+              <tr key={lt._id} className="border-b hover:bg-blue-50">
+                <td className="p-4 font-bold">{lt.name}</td>
+                <td className="p-4">{lt.allowedLeaves}</td>
                 <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${lt.isHalfDayAllowed ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                        {lt.isHalfDayAllowed ? "Enabled" : "Disabled"}
-                    </span>
+                  {lt.isHalfDayAllowed ? "Yes" : "No"}
                 </td>
-                <td className="p-4 text-xs text-gray-500">
-                    {moment(lt.startDate).format("DD MMM YY")} - {moment(lt.endDate).format("DD MMM YY")}
+                <td className="p-4 font-bold">
+                  {lt.leaveEffect}
                 </td>
-                <td className="p-4 flex flex-wrap gap-1">
+                <td className="p-4 text-xs">
+                  {moment(lt.startDate).format("DD MMM YY")} -{" "}
+                  {moment(lt.endDate).format("DD MMM YY")}
+                </td>
+                <td className="p-4 flex gap-1 flex-wrap">
                   {lt.roles.map((r) => (
-                    <span key={r} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] uppercase font-bold">
+                    <span
+                      key={r}
+                      className="px-2 py-1 bg-blue-100 rounded text-xs"
+                    >
                       {r}
                     </span>
                   ))}
                 </td>
                 <td className="p-4 text-center">
-                   <div className="flex justify-center gap-2">
-                    <button onClick={() => openEditModal(lt)} className="text-blue-600 hover:text-blue-800 font-bold text-sm">Edit</button>
-                    <button onClick={() => handleDelete(lt._id)} className="text-red-500 hover:text-red-700 font-bold text-sm">Delete</button>
-                   </div>
+                  <button
+                    onClick={() => openEditModal(lt)}
+                    className="text-blue-600 font-bold mr-3"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(lt._id)}
+                    className="text-red-600 font-bold"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             ))}
@@ -146,66 +193,157 @@ const openEditModal = (lt) => {
         </table>
       </div>
 
-      {/* Edit Modal */}
+      {/* ================= EDIT MODAL ================= */}
       {editingLeave && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-6 text-blue-900">Edit Policy Rules</h2>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-3xl w-full max-w-lg">
+            <h2 className="text-2xl font-bold mb-6">
+              Edit Leave Policy
+            </h2>
 
-            <form onSubmit={handleUpdate} className="space-y-5">
-              
-              {/* Name and Count */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="text-xs font-bold text-gray-500">Leave Name</label>
-                    <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full p-3 border rounded-xl" />
-                </div>
-                <div>
-                    <label className="text-xs font-bold text-gray-500">Total Leaves</label>
-                    <input type="number" value={editForm.allowedLeaves} onChange={(e) => setEditForm({ ...editForm, allowedLeaves: e.target.value })} className="w-full p-3 border rounded-xl" />
-                </div>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                className="w-full p-3 border rounded-xl"
+                placeholder="Leave Name"
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  value={editForm.startDate}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, startDate: e.target.value })
+                  }
+                  className="p-3 border rounded-xl"
+                />
+                <input
+                  type="date"
+                  value={editForm.endDate}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, endDate: e.target.value })
+                  }
+                  className="p-3 border rounded-xl"
+                />
               </div>
 
-              {/* Date Range */}
-              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-2xl">
-                <div>
-                    <label className="text-xs font-bold text-gray-500">Start Date</label>
-                    <input type="date" value={editForm.startDate} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} className="w-full p-2 border rounded-lg text-sm" />
-                </div>
-                <div>
-                    <label className="text-xs font-bold text-gray-500">End Date</label>
-                    <input type="date" value={editForm.endDate} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} className="w-full p-2 border rounded-lg text-sm" />
-                </div>
-              </div>
+              <input
+                type="number"
+                value={editForm.allowedLeaves}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    allowedLeaves: e.target.value,
+                  })
+                }
+                className="w-full p-3 border rounded-xl"
+                placeholder="Allowed Leaves"
+              />
 
-              {/* Toggles */}
-              <div className="flex gap-4">
-                <button type="button" onClick={() => setEditForm({ ...editForm, isHalfDayAllowed: !editForm.isHalfDayAllowed })}
-                  className={`flex-1 p-3 rounded-xl border font-bold text-sm ${editForm.isHalfDayAllowed ? "bg-blue-600 text-white" : "bg-white text-gray-500"}`}>
-                  {editForm.isHalfDayAllowed ? "✓ Half-Day On" : "Half-Day Off"}
+              {/* TOGGLES */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm({
+                      ...editForm,
+                      isHalfDayAllowed: !editForm.isHalfDayAllowed,
+                    })
+                  }
+                  className={`p-2 rounded-xl ${
+                    editForm.isHalfDayAllowed
+                      ? "bg-blue-600 text-white"
+                      : "border"
+                  }`}
+                >
+                  Half Day
                 </button>
-                <button type="button" onClick={() => setEditForm({ ...editForm, isForwarding: !editForm.isForwarding })}
-                  className={`flex-1 p-3 rounded-xl border font-bold text-sm ${editForm.isForwarding ? "bg-blue-600 text-white" : "bg-white text-gray-500"}`}>
-                  {editForm.isForwarding ? "✓ Forwarding On" : "Forwarding Off"}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm({
+                      ...editForm,
+                      isForwarding: !editForm.isForwarding,
+                    })
+                  }
+                  className={`p-2 rounded-xl ${
+                    editForm.isForwarding
+                      ? "bg-blue-600 text-white"
+                      : "border"
+                  }`}
+                >
+                  Carry Forward
                 </button>
               </div>
 
-              {/* Roles */}
-              <div>
-                <p className="font-bold text-gray-700 text-sm mb-2">Applicable Roles</p>
-                <div className="flex flex-wrap gap-2">
-                  {roleList.map((role) => (
-                    <button key={role} type="button" onClick={() => toggleRole(role)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold border ${editForm.roles.includes(role) ? "bg-blue-900 text-white" : "bg-gray-100 text-gray-600"}`}>
-                      {role}
-                    </button>
-                  ))}
-                </div>
+              {/* LEAVE EFFECT */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm({ ...editForm, leaveEffect: "DEDUCT" })
+                  }
+                  className={`p-2 rounded-xl ${
+                    editForm.leaveEffect === "DEDUCT"
+                      ? "bg-red-600 text-white"
+                      : "border"
+                  }`}
+                >
+                  Deduct Leave
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditForm({ ...editForm, leaveEffect: "ADD" })
+                  }
+                  className={`p-2 rounded-xl ${
+                    editForm.leaveEffect === "ADD"
+                      ? "bg-green-600 text-white"
+                      : "border"
+                  }`}
+                >
+                  Credit Leave
+                </button>
+              </div>
+
+              {/* ROLES */}
+              <div className="flex flex-wrap gap-2">
+                {roleList.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => toggleRole(r)}
+                    className={`px-3 py-1 rounded-lg border ${
+                      editForm.roles.includes(r)
+                        ? "bg-blue-800 text-white"
+                        : ""
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setEditingLeave(null)} className="px-6 py-3 bg-gray-200 rounded-xl font-bold">Cancel</button>
-                <button type="submit" className="px-6 py-3 bg-blue-900 text-white rounded-xl font-bold shadow-lg">Update Policy</button>
+                <button
+                  type="button"
+                  onClick={() => setEditingLeave(null)}
+                  className="px-6 py-3 bg-gray-200 rounded-xl font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-blue-900 text-white rounded-xl font-bold"
+                >
+                  Update Policy
+                </button>
               </div>
             </form>
           </div>

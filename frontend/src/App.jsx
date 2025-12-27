@@ -176,6 +176,7 @@ function App() {
             <Route path="delete-sub" element={<ViewSubjects />} />
               <Route path="add-class" element={<Addclass />} />
               <Route path="delete-class" element={<Editdeleteclass />} />
+            <Route path="substitution-details" element={<SubstitutionPage />} />
 
             {/* <Route path="delete-sub" element={<ViewSubjects />} /> */}
             <Route path="edit-sub" element={<EditSubjectModal/>}/>

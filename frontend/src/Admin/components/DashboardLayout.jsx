@@ -133,6 +133,8 @@ function Sidebar() {
                 <li><NavLink to="delete-class">Delete/Edit Class</NavLink></li>
               </ul>
             )}
+            <li><NavLink to="substitution-details">Substitution Details</NavLink></li>
+
           </>
         )}
 
