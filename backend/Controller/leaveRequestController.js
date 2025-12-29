@@ -1465,3 +1465,6 @@ exports.getMonthlyAttendanceReport = async (req, res) => {
 };
 
 
+// DEPARTMENT FACULTY PRESENT DAYS REPORT
+// GET /api/leaveType/department/present-days?departmentId=xxx&month=3&year=2025
+

@@ -6,7 +6,7 @@ const {
   getAllLeaveTypes,
   searchLeaveType,
   getFacultyLeaveSummary,
-  getDepartmentLeaveBalance 
+  getDepartmentLeaveBalance ,getDepartmentPresentDaysReport
 } = require("../Controller/leaveTypeController");
 
 const router = express.Router();
@@ -20,4 +20,7 @@ router.get("/faculty/:employeeId/leaves", getFacultyLeaveSummary);
 router.get(
   "/department/leave-balance",
   getDepartmentLeaveBalance
-);module.exports = router;
+);
+router.get("/department/present-days", getDepartmentPresentDaysReport);
+
+module.exports = router;

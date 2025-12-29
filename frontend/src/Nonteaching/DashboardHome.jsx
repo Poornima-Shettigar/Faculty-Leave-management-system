@@ -271,7 +271,7 @@ useEffect(() => {
       )}
 
       {/* NEW: Monthly Attendance Report */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+      {/* <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
           <h2 className="text-xl font-semibold text-gray-800">
             📅 Monthly Attendance (Admin)
@@ -380,7 +380,7 @@ useEffect(() => {
             </div>
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

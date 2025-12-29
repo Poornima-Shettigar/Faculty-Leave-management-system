@@ -812,3 +812,140 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+exports.getDepartmentPresentDaysReport = async (req, res) => {
+  try {
+    const { departmentId, month, year } = req.query;
+
+    if (!departmentId || !month || !year) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    const startOfMonth = moment([year, month - 1, 1]).startOf("day");
+    const endOfMonth = startOfMonth.clone().endOf("month");
+    const daysInMonth = endOfMonth.date();
+
+    // 1. Calculate Sundays in month
+    let sundays = 0;
+    let currentDate = startOfMonth.clone();
+    while (currentDate.isSameOrBefore(endOfMonth)) {
+      if (currentDate.day() === 0) sundays++; // Sunday = 0
+      currentDate.add(1, 'day');
+    }
+
+    // 2. Govt Holidays (customize this array for your institution)
+    const govtHolidays = [
+      // Add your institution's 2025 holidays here
+      '2025-01-26', // Republic Day
+      '2025-03-14',
+       '2025-01-26',  // Republic Day
+  '2025-08-15',  // Independence Day  
+  '2025-10-02',  // Gandhi Jayanti
+  
+  // Christmas (Fixed)
+  '2025-12-25',  // 🎄 Christmas
+  
+  // Regional/Religious Holidays (2025 tentative dates - customize for your state/college)
+  '2025-01-01',  // New Year's Day
+  '2025-03-31',  // Id-ul-Fitr (Ramadan)
+  '2025-06-07',  // Bakrid
+  '2025-09-06',  // Janmashtami
+  '2025-09-16',  // Milad-un-Nabi
+  '2025-10-21',  // Dussehra
+  '2025-11-01',  // Diwali
+  '2025-11-15',  // Holi (adjust dates yearly)
+      // Add more: Eid, Diwali, etc.
+    ];
+    let govtHolidaysInMonth = 0;
+    govtHolidays.forEach(holiday => {
+      if (moment(holiday).isBetween(startOfMonth, endOfMonth, null, '[]')) {
+        govtHolidaysInMonth++;
+      }
+    });
+
+    // 3. Working days = Total days - Sundays - Govt holidays
+    const workingDays = daysInMonth - sundays - govtHolidaysInMonth;
+
+    // 4. Get faculty list
+    const facultyList = await User.find({
+      departmentType: departmentId,
+      role: { $in: ["teaching", "non-teaching", "hod"] }
+    }).select("name email role _id");
+
+    // 5. Get approved leaves intersecting this month
+    const facultyIds = facultyList.map(f => f._id);
+    const approvedLeaves = await LeaveRequest.find({
+      employeeId: { $in: facultyIds },
+      status: "approved",
+      endDate: { $gte: startOfMonth.toDate() },
+      startDate: { $lte: endOfMonth.toDate() }
+    }).populate("leaveTypeId", "name");
+
+    // 6. Helper: is excluded leave type (CL, EL)
+    const isExcludedLeave = (leaveTypeName = "") => {
+      const name = leaveTypeName.toUpperCase();
+      return name.includes("CASUAL") || name.includes("CL") || 
+             name.includes("EARNED") || name.includes("EL")||
+             name.includes("ON DUTY") || name.includes("OOD");
+    };
+
+    // 7. Calculate present days per faculty
+    const facultyPresentData = facultyList.map(faculty => {
+      let leaveDaysDeducted = 0; // Only NON-CL/EL leaves
+
+      // Filter leaves for this faculty that intersect month
+      const facultyLeaves = approvedLeaves.filter(lr => 
+        lr.employeeId.toString() === faculty._id.toString()
+      );
+
+      facultyLeaves.forEach(lr => {
+        if (!lr.leaveTypeId || isExcludedLeave(lr.leaveTypeId.name)) {
+          return; // Skip CL/EL
+        }
+
+        // Calculate actual days in month
+        const lrStart = moment.max(moment(lr.startDate).startOf('day'), startOfMonth);
+        const lrEnd = moment.min(moment(lr.endDate).endOf('day'), endOfMonth);
+        const daysInPeriod = lrEnd.diff(lrStart, 'days') + 1;
+        
+        if (daysInPeriod > 0) {
+          leaveDaysDeducted += daysInPeriod;
+        }
+      });
+
+      // Present days = Working days - Deductible leave days
+      const presentDays = Math.max(workingDays - leaveDaysDeducted, 0);
+
+      return {
+        facultyId: faculty._id,
+        name: faculty.name,
+        email: faculty.email,
+        role: faculty.role,
+        daysInMonth,
+        sundays,
+        govtHolidays: govtHolidaysInMonth,
+        workingDays,
+        leaveDaysDeducted, // NON-CL/EL leaves only
+        presentDays
+      };
+    });
+
+    res.json({
+      departmentId,
+      month: parseInt(month),
+      year: parseInt(year),
+      summary: {
+        daysInMonth,
+        sundays,
+        govtHolidays: govtHolidaysInMonth,
+        workingDays,
+        totalFaculty: facultyPresentData.length,
+        totalPresentDays: facultyPresentData.reduce((sum, f) => sum + f.presentDays, 0)
+      },
+      facultyPresentData
+    });
+
+  } catch (error) {
+    console.error("Error fetching present days report:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
