@@ -4,6 +4,7 @@ const controller = require("../Controller/timetableController");
 
 // Create timetable
 router.post("/create", controller.createTimetable);
+router.get("/check", controller.checkTimetableExists);
 
 // MUST COME FIRST
 // router.get("/getById/:id", controller.getById);

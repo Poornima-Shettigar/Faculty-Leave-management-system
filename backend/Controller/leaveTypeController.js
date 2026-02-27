@@ -7,6 +7,38 @@ const Notification = require("../Models/Notification");
 const Timetable = require("../Models/Timetable");
 const Department = require("../Models/Department");
 
+// Helper: current year
+const getCurrentYear = () => new Date().getFullYear();
+
+async function ensureEmployeeLeaves(employeeId, role) {
+  const normalizedRole = role.toLowerCase().trim();
+  const currentYear = getCurrentYear();
+
+  const leaveTypes = await LeaveType.find({
+    roles: { $in: [normalizedRole] }
+  });
+
+  for (const lt of leaveTypes) {
+    const exists = await EmployeeLeave.findOne({
+      employeeId,
+      leaveTypeId: lt._id,
+      year: currentYear
+    });
+
+    if (!exists) {
+      await EmployeeLeave.create({
+        employeeId,
+        leaveTypeId: lt._id,
+        year: currentYear,
+        totalLeaves: lt.leaveEffect === "ADD" ? 0 : lt.allowedLeaves,
+        usedLeaves: 0,
+        carryForwardLeaves: 0,
+        creditedLeaves: lt.leaveEffect === "ADD" ? lt.allowedLeaves : 0
+      });
+    }
+  }
+}
+
 async function createNotification(userId, leaveRequestId, type, title, message) {
   return await Notification.create({ userId, leaveRequestId, type, title, message });
 }
@@ -88,7 +120,13 @@ exports.addLeaveType = async (req, res) => {
       endDate
     });
 
-    const users = await User.find({ role: { $in: roles } });
+    // Normalize roles to avoid case mismatch
+    const normalizedRoles = roles.map((r) => r.toLowerCase().trim());
+    const users = await User.find({
+      role: { $in: normalizedRoles }
+    });
+
+    const currentYear = getCurrentYear();
 
     const allocations = users
       .map((user) => {
@@ -104,11 +142,13 @@ exports.addLeaveType = async (req, res) => {
         return {
           employeeId: user._id,
           leaveTypeId: leaveType._id,
-          totalLeaves: leaveEffect === "ADD" ? 0 : finalLeaves,
+          year: currentYear,
+          totalLeaves: leaveEffect === "ADD" ? 0 : allowedLeaves, // exact
           usedLeaves: 0,
           carryForwardLeaves: 0,
-          creditedLeaves: leaveEffect === "ADD" ? finalLeaves : 0
+          creditedLeaves: leaveEffect === "ADD" ? allowedLeaves : 0
         };
+
       })
       .filter(Boolean);
 
@@ -141,17 +181,43 @@ exports.updateLeaveType = async (req, res) => {
 };
 
 // 3. DELETE Leave Type
+// 3. DELETE Leave Type
 exports.deleteLeaveType = async (req, res) => {
   try {
     const id = req.params.id;
-    await LeaveType.findByIdAndDelete(id);
+
+    // 1) Delete the LeaveType itself
+    const deleted = await LeaveType.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Leave type not found" });
+    }
+
+    // 2) Delete all EmployeeLeave allocations for this leave type
     await EmployeeLeave.deleteMany({ leaveTypeId: id });
 
-    res.json({ message: "Leave type deleted successfully" });
+    // 3) Find all leave requests of this type
+    const relatedRequests = await LeaveRequest.find({ leaveTypeId: id }).select("_id");
+
+    const requestIds = relatedRequests.map((r) => r._id);
+
+    if (requestIds.length > 0) {
+      // 4) Delete all those leave requests
+      await LeaveRequest.deleteMany({ _id: { $in: requestIds } });
+
+      // 5) Delete all notifications linked to those requests
+      await Notification.deleteMany({ leaveRequestId: { $in: requestIds } });
+    }
+
+    // (Optional) If you stored any timetable changes that depend only on leaveTypeId,
+    // delete or revert them here as well.
+
+    res.json({ message: "Leave type and all related data deleted successfully" });
   } catch (err) {
+    console.error("Error deleting leave type:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
+
 
 // 4. LIST Leave Types
 exports.getAllLeaveTypes = async (req, res) => {
@@ -178,8 +244,14 @@ exports.searchLeaveType = async (req, res) => {
 // APPLY LEAVE REQUEST
 exports.applyLeaveRequest = async (req, res) => {
   try {
-    const { employeeId, leaveTypeId, startDate, endDate, description, periodAdjustments } =
-      req.body;
+    const {
+      employeeId,
+      leaveTypeId,
+      startDate,
+      endDate,
+      description,
+      periodAdjustments
+    } = req.body;
 
     if (!employeeId || !leaveTypeId || !startDate || !endDate || !description)
       return res
@@ -199,7 +271,13 @@ exports.applyLeaveRequest = async (req, res) => {
     if (!leaveType)
       return res.status(404).json({ message: "Leave type not found" });
 
-    const employeeLeave = await EmployeeLeave.findOne({ employeeId, leaveTypeId });
+    const currentYear = getCurrentYear();
+
+    const employeeLeave = await EmployeeLeave.findOne({
+      employeeId,
+      leaveTypeId,
+      year: currentYear
+    });
     if (!employeeLeave)
       return res
         .status(400)
@@ -268,7 +346,8 @@ exports.applyLeaveRequest = async (req, res) => {
     const formattedPeriodAdjustments = periods.map((period) => {
       let status = "pending";
       if (period.substituteFacultyId) status = "adjusted";
-      else if (description.toLowerCase().includes("emergency")) status = "not_required";
+      else if (description.toLowerCase().includes("emergency"))
+        status = "not_required";
 
       return {
         ...period,
@@ -339,12 +418,22 @@ exports.applyLeaveRequest = async (req, res) => {
   }
 };
 
-// 6. FACULTY LEAVE SUMMARY
+// 6. FACULTY LEAVE SUMMARY – CURRENT YEAR ONLY
 exports.getFacultyLeaveSummary = async (req, res) => {
   try {
     const { employeeId } = req.params;
 
-    const leaves = await EmployeeLeave.find({ employeeId }).populate("leaveTypeId");
+    const user = await User.findById(employeeId);
+    if (user) {
+      await ensureEmployeeLeaves(employeeId, user.role);
+    }
+
+    const currentYear = getCurrentYear();
+
+    const leaves = await EmployeeLeave.find({
+      employeeId,
+      year: currentYear
+    }).populate("leaveTypeId");
 
     const formatted = leaves
       .map((l) => {
@@ -352,6 +441,7 @@ exports.getFacultyLeaveSummary = async (req, res) => {
 
         const effect = l.leaveTypeId.leaveEffect;
 
+        // for DEDUCT: total = current year + carry forward
         const totalAvailable =
           effect === "ADD"
             ? (l.creditedLeaves || 0)
@@ -366,15 +456,26 @@ exports.getFacultyLeaveSummary = async (req, res) => {
           leaveTypeId: l.leaveTypeId._id,
           leaveTypeName: l.leaveTypeId.name,
           leaveEffect: effect,
-          allowedLeaves: l.totalLeaves || 0,
+
+          // show only current year allocation here
+          allowedLeaves:
+            effect === "ADD" ? l.creditedLeaves || 0 : l.totalLeaves || 0,
+
+          // previous-year balance brought into this year
           carryForwardLeaves: l.carryForwardLeaves || 0,
-          usedLeaves: l.usedLeaves || 0,
+
+          // total including carry forward
           totalAvailable,
+
+          usedLeaves: l.usedLeaves || 0,
           remainingLeaves: remaining,
-          isHalfDayAllowed: l.leaveTypeId.isHalfDayAllowed
+          isHalfDayAllowed: l.leaveTypeId.isHalfDayAllowed,
+          year: l.year
         };
       })
       .filter(Boolean);
+
+
 
     res.json(formatted);
   } catch (err) {
@@ -407,6 +508,7 @@ exports.hodApproveReject = async (req, res) => {
       return res.status(403).json({ message: "Only HOD can approve/reject" });
 
     const leaveType = await LeaveType.findById(leaveRequest.leaveTypeId);
+    const currentYear = getCurrentYear();
 
     if (action === "approve") {
       if (leaveRequest.employeeId.role === "hod") {
@@ -421,22 +523,16 @@ exports.hodApproveReject = async (req, res) => {
         comments
       };
 
-      // HOD final approver only for non-HOD staff
       if (leaveRequest.status === "approved") {
         const empLeave = await EmployeeLeave.findOne({
           employeeId: leaveRequest.employeeId.id,
-          leaveTypeId: leaveRequest.leaveTypeId
+          leaveTypeId: leaveRequest.leaveTypeId,
+          year: currentYear
         });
 
         if (empLeave && leaveType) {
-          if (leaveType.leaveEffect === "DEDUCT") {
-            empLeave.usedLeaves =
-              (empLeave.usedLeaves || 0) + leaveRequest.totalDays;
-          } else if (leaveType.leaveEffect === "ADD") {
-            // consume credits, do not credit again
-            empLeave.usedLeaves =
-              (empLeave.usedLeaves || 0) + leaveRequest.totalDays;
-          }
+          empLeave.usedLeaves =
+            (empLeave.usedLeaves || 0) + leaveRequest.totalDays;
           await empLeave.save();
         }
 
@@ -521,8 +617,7 @@ exports.hodApproveReject = async (req, res) => {
         leaveRequest.id,
         "leave_rejected",
         "Leave Rejected",
-        `Your leave request has been rejected by HOD. ${
-          comments ? "Reason: " + comments : ""
+        `Your leave request has been rejected by HOD. ${comments ? "Reason: " + comments : ""
         }`
       );
 
@@ -574,6 +669,7 @@ exports.directorApproveReject = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized Director access" });
 
     const leaveType = await LeaveType.findById(leaveRequest.leaveTypeId);
+    const currentYear = getCurrentYear();
 
     if (action === "approve") {
       leaveRequest.status = "approved";
@@ -585,18 +681,13 @@ exports.directorApproveReject = async (req, res) => {
 
       const employeeLeave = await EmployeeLeave.findOne({
         employeeId: leaveRequest.employeeId.id,
-        leaveTypeId: leaveRequest.leaveTypeId
+        leaveTypeId: leaveRequest.leaveTypeId,
+        year: currentYear
       });
 
       if (employeeLeave && leaveType) {
-        if (leaveType.leaveEffect === "DEDUCT") {
-          employeeLeave.usedLeaves =
-            (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
-        } else if (leaveType.leaveEffect === "ADD") {
-          // consume credits only
-          employeeLeave.usedLeaves =
-            (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
-        }
+        employeeLeave.usedLeaves =
+          (employeeLeave.usedLeaves || 0) + leaveRequest.totalDays;
         await employeeLeave.save();
       }
 
@@ -682,8 +773,7 @@ exports.directorApproveReject = async (req, res) => {
         leaveRequest.id,
         "leave_rejected",
         "Leave Request Rejected",
-        `Your leave request has been rejected by Director. ${
-          comments ? "Reason: " + comments : ""
+        `Your leave request has been rejected by Director. ${comments ? "Reason: " + comments : ""
         }`
       );
 
@@ -716,7 +806,6 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
 
     const daysInMonth = endOfMonth.date();
 
-    // 1. Get all faculty in this department
     const facultyList = await User.find({
       departmentType: departmentId,
       role: { $in: ["teaching", "non-teaching", "hod"] }
@@ -724,22 +813,20 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
 
     const facultyIds = facultyList.map((f) => f._id);
 
-    // 2. Get their leave allocations
     const allocations = await EmployeeLeave.find({
-      employeeId: { $in: facultyIds }
+      employeeId: { $in: facultyIds },
+      year: y
     }).populate("leaveTypeId");
 
-    // 3. Get approved leave requests in selected month
     const leaveRequests = await LeaveRequest.find({
       employeeId: { $in: facultyIds },
-      status: "approved",
+      status: { $in: ["Approved by Director", "approved"] },
       startDate: { $lte: endOfMonth.toDate() },
       endDate: { $gte: startOfMonth.toDate() }
     }).populate("employeeId", "name email role");
 
     const map = {};
 
-    // init from allocations
     for (const alloc of allocations) {
       const id = alloc.employeeId.toString();
       if (!map[id]) {
@@ -760,7 +847,7 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
       const effect = alloc.leaveTypeId?.leaveEffect;
       const totalAvailable =
         effect === "ADD"
-          ? (alloc.creditedLeaves || 0)
+          ? alloc.creditedLeaves || 0
           : (alloc.totalLeaves || 0) + (alloc.carryForwardLeaves || 0);
 
       const remaining =
@@ -773,7 +860,6 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
       map[id].totalRemaining += remaining;
     }
 
-    // add usedInMonth from requests
     for (const reqDoc of leaveRequests) {
       const id = reqDoc.employeeId._id.toString();
       if (!map[id]) {
@@ -812,6 +898,7 @@ exports.getDepartmentLeaveBalance = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 exports.getDepartmentPresentDaysReport = async (req, res) => {
   try {
     const { departmentId, month, year } = req.query;
@@ -824,95 +911,89 @@ exports.getDepartmentPresentDaysReport = async (req, res) => {
     const endOfMonth = startOfMonth.clone().endOf("month");
     const daysInMonth = endOfMonth.date();
 
-    // 1. Calculate Sundays in month
     let sundays = 0;
     let currentDate = startOfMonth.clone();
     while (currentDate.isSameOrBefore(endOfMonth)) {
-      if (currentDate.day() === 0) sundays++; // Sunday = 0
-      currentDate.add(1, 'day');
+      if (currentDate.day() === 0) sundays++;
+      currentDate.add(1, "day");
     }
 
-    // 2. Govt Holidays (customize this array for your institution)
     const govtHolidays = [
-      // Add your institution's 2025 holidays here
-      '2025-01-26', // Republic Day
-      '2025-03-14',
-       '2025-01-26',  // Republic Day
-  '2025-08-15',  // Independence Day  
-  '2025-10-02',  // Gandhi Jayanti
-  
-  // Christmas (Fixed)
-  '2025-12-25',  // 🎄 Christmas
-  
-  // Regional/Religious Holidays (2025 tentative dates - customize for your state/college)
-  '2025-01-01',  // New Year's Day
-  '2025-03-31',  // Id-ul-Fitr (Ramadan)
-  '2025-06-07',  // Bakrid
-  '2025-09-06',  // Janmashtami
-  '2025-09-16',  // Milad-un-Nabi
-  '2025-10-21',  // Dussehra
-  '2025-11-01',  // Diwali
-  '2025-11-15',  // Holi (adjust dates yearly)
-      // Add more: Eid, Diwali, etc.
+      "2026-01-01", "2026-01-26", "2026-03-08", "2026-03-25", "2026-04-10",
+      "2026-05-01", "2026-08-15", "2026-10-02", "2026-10-21", "2026-11-01",
+      "2026-12-25"
     ];
     let govtHolidaysInMonth = 0;
-    govtHolidays.forEach(holiday => {
-      if (moment(holiday).isBetween(startOfMonth, endOfMonth, null, '[]')) {
+    govtHolidays.forEach((holiday) => {
+      if (moment(holiday).isBetween(startOfMonth, endOfMonth, null, "[]")) {
         govtHolidaysInMonth++;
       }
     });
 
-    // 3. Working days = Total days - Sundays - Govt holidays
     const workingDays = daysInMonth - sundays - govtHolidaysInMonth;
 
-    // 4. Get faculty list
     const facultyList = await User.find({
       departmentType: departmentId,
       role: { $in: ["teaching", "non-teaching", "hod"] }
     }).select("name email role _id");
 
-    // 5. Get approved leaves intersecting this month
-    const facultyIds = facultyList.map(f => f._id);
+    const facultyIds = facultyList.map((f) => f._id);
     const approvedLeaves = await LeaveRequest.find({
       employeeId: { $in: facultyIds },
-      status: "approved",
+      status: { $in: ["Approved by Director", "approved"] },
       endDate: { $gte: startOfMonth.toDate() },
       startDate: { $lte: endOfMonth.toDate() }
     }).populate("leaveTypeId", "name");
 
-    // 6. Helper: is excluded leave type (CL, EL)
     const isExcludedLeave = (leaveTypeName = "") => {
       const name = leaveTypeName.toUpperCase();
-      return name.includes("CASUAL") || name.includes("CL") || 
-             name.includes("EARNED") || name.includes("EL")||
-             name.includes("ON DUTY") || name.includes("OOD");
+      return (
+        name.includes("CASUAL") ||
+        name.includes("CL") ||
+        name.includes("EARNED") ||
+        name.includes("EL") ||
+        name.includes("ON DUTY") ||
+        name.includes("OOD")
+      );
     };
 
-    // 7. Calculate present days per faculty
-    const facultyPresentData = facultyList.map(faculty => {
-      let leaveDaysDeducted = 0; // Only NON-CL/EL leaves
+    const facultyPresentData = facultyList.map((faculty) => {
+      let leaveDaysDeducted = 0;
+      faculty.leaveDaysToDate = 0; // initialize sub-field
 
-      // Filter leaves for this faculty that intersect month
-      const facultyLeaves = approvedLeaves.filter(lr => 
-        lr.employeeId.toString() === faculty._id.toString()
+      const facultyLeaves = approvedLeaves.filter(
+        (lr) => lr.employeeId.toString() === faculty._id.toString()
       );
 
-      facultyLeaves.forEach(lr => {
+      facultyLeaves.forEach((lr) => {
         if (!lr.leaveTypeId || isExcludedLeave(lr.leaveTypeId.name)) {
-          return; // Skip CL/EL
+          return;
         }
 
-        // Calculate actual days in month
-        const lrStart = moment.max(moment(lr.startDate).startOf('day'), startOfMonth);
-        const lrEnd = moment.min(moment(lr.endDate).endOf('day'), endOfMonth);
-        const daysInPeriod = lrEnd.diff(lrStart, 'days') + 1;
-        
-        if (daysInPeriod > 0) {
-          leaveDaysDeducted += daysInPeriod;
+        const lrStart = moment.max(moment(lr.startDate).startOf("day"), startOfMonth);
+        const lrEnd = moment.min(moment(lr.endDate).endOf("day"), endOfMonth);
+
+        const today = moment().startOf("day");
+
+        // Accurate calculation: exclude Sundays and Govt Holidays from leave deduction
+        let tempDate = lrStart.clone();
+        while (tempDate.isSameOrBefore(lrEnd)) {
+          const isSunday = tempDate.day() === 0;
+          const isGovtHoliday = govtHolidays.includes(tempDate.format("YYYY-MM-DD"));
+
+          if (!isSunday && !isGovtHoliday) {
+            const increment = lr.isHalfDay ? 0.5 : 1;
+            leaveDaysDeducted += increment;
+
+            // Check if this specific day is in the past or today
+            if (tempDate.isSameOrBefore(today)) {
+              faculty.leaveDaysToDate = (faculty.leaveDaysToDate || 0) + increment;
+            }
+          }
+          tempDate.add(1, "day");
         }
       });
 
-      // Present days = Working days - Deductible leave days
       const presentDays = Math.max(workingDays - leaveDaysDeducted, 0);
 
       return {
@@ -924,7 +1005,8 @@ exports.getDepartmentPresentDaysReport = async (req, res) => {
         sundays,
         govtHolidays: govtHolidaysInMonth,
         workingDays,
-        leaveDaysDeducted, // NON-CL/EL leaves only
+        leaveDaysDeducted,
+        leaveDaysToDate: faculty.leaveDaysToDate,
         presentDays
       };
     });
@@ -939,11 +1021,13 @@ exports.getDepartmentPresentDaysReport = async (req, res) => {
         govtHolidays: govtHolidaysInMonth,
         workingDays,
         totalFaculty: facultyPresentData.length,
-        totalPresentDays: facultyPresentData.reduce((sum, f) => sum + f.presentDays, 0)
+        totalPresentDays: facultyPresentData.reduce(
+          (sum, f) => sum + f.presentDays,
+          0
+        )
       },
       facultyPresentData
     });
-
   } catch (error) {
     console.error("Error fetching present days report:", error);
     res.status(500).json({ message: "Server error", error: error.message });

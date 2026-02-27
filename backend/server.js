@@ -49,6 +49,7 @@ const authRoutes = require("./Router/AuthRoutes");
 const timetableRoutes = require("./Router/timetableRoutes");
 const leaveTypeRoutes = require("./Router/leaveTypeRoutes");
 const leaveRequestRoutes = require("./Router/leaveRequestRoutes");
+const directorRoutes = require("./Router/DirectorRoutes");
 
 require("./cron/resetLeaves");
 
@@ -76,6 +77,8 @@ app.use("/api/subject", require("./Router/subjectRoutes"));
 app.use("/api/leaveType", leaveTypeRoutes);
 app.use("/api/timetable", timetableRoutes);
 app.use("/api/leave-request", leaveRequestRoutes);
+app.use("/api/director", directorRoutes);
+app.use("/api/chatbot", require("./Router/ChatbotRoutes"));
 
 // Start server
 app.listen(5000, () => {

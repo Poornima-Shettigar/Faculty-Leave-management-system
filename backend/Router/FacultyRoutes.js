@@ -29,8 +29,12 @@ const facultyController = require("../Controller/FacultyController");
 router.post("/add", facultyController.addFaculty);
 router.get("/list", facultyController.getFacultyList);
 router.get("/get/:id", facultyController.getFacultyById);
+router.patch("/profile/:id", facultyController.updateOwnProfile); // User update their own profile - MOVE ABOVE GENERIC PATCH
 router.patch("/:id", facultyController.updateFaculty);
 router.delete("/:id", facultyController.deleteFaculty);
+
+// Phone number uniqueness check
+router.get("/check-phone/:phone", facultyController.checkPhoneUniqueness);
 
 // Department-based
 router.get("/getByDept/:id", facultyController.getFacultyByDepartment);

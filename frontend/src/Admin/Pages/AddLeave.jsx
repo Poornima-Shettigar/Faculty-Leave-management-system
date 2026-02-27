@@ -12,7 +12,7 @@ function AddLeaveType() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const roleList = ["teaching", "non-teaching", "hod", "admin", "director"];
+  const roleList = ["teaching", "non-teaching", "hod", "admin"];
 
   const handleRoleChange = (role) => {
     setRoles(prev =>

@@ -45,12 +45,27 @@ router.get("/analytics/department/:departmentId", leaveRequestController.getDepa
 // router.get("/director/pending/:directorId", leaveRequestController.getDirectorPendingRequests);
 // router.get("/director/approved/:directorId", leaveRequestController.getDirectorApprovedLeaves);
 // ADD THIS LINE BELOW:
-router.get("/director/all/:directorId", leaveRequestController.getDirectorAllRequests); 
+router.get("/director/all/:directorId", leaveRequestController.getDirectorAllRequests);
 // router.put("/director/action/:leaveRequestId", leaveRequestController.directorApproveReject);
 router.get(
   "/faculty/:employeeId/usage",
   leaveRequestController.getFacultyLeaveUsageByMonth
 );
+
+// Substitute approval/rejection
+router.put(
+  "/substitute/approve/:leaveRequestId/:periodId",
+  leaveRequestController.substituteApprovePeriod
+);
+
+router.put(
+  "/substitute/reject/:leaveRequestId/:periodId",
+  leaveRequestController.substituteRejectPeriod
+);
+
+// Cancel leave request
+router.put("/cancel/:leaveRequestId", leaveRequestController.cancelLeaveRequest);
+
 module.exports = router;
 
 

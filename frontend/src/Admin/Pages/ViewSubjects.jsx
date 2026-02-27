@@ -5,7 +5,7 @@ import EditSubjectModal from "./EditSubjectModal";
 function ViewSubjects() {
   // Logged-in HOD details
   const user = JSON.parse(localStorage.getItem("user")) || {};
-  const hodDept = user.departmentType || "";
+  const hodDept = user.departmentId || user.departmentType?._id || user.departmentType || "";
 
   const [departments, setDepartments] = useState([]);
   const [deptId, setDeptId] = useState(hodDept);

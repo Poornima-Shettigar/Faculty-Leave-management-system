@@ -34,6 +34,8 @@ function ViewDepartmentLeaves() {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
+      pending_substitute: { label: "Pending Substitute", color: "bg-purple-100 text-purple-800" },
+      rejected_by_substitute: { label: "Rejected by Substitute", color: "bg-red-200 text-red-900" },
       pending_hod: { label: "Pending HOD Approval", color: "bg-yellow-100 text-yellow-800" },
       pending_director: { label: "Pending Director Approval", color: "bg-blue-100 text-blue-800" },
       approved: { label: "Approved", color: "bg-green-100 text-green-800" },
@@ -53,8 +55,8 @@ function ViewDepartmentLeaves() {
     return moment(date).format("MMM D, YYYY");
   };
 
-  const filteredRequests = filterStatus === "all" 
-    ? leaveRequests 
+  const filteredRequests = filterStatus === "all"
+    ? leaveRequests
     : leaveRequests.filter(req => req.status === filterStatus);
 
   if (loading) {
@@ -166,24 +168,24 @@ function ViewDepartmentLeaves() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
           <div className="bg-white p-8 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold mb-4">Leave Request Details</h2>
-            
+
             <div className="space-y-4">
               <div>
                 <strong>Employee:</strong> {selectedRequest.employeeId?.name || "N/A"}
                 <br />
                 <strong>Email:</strong> {selectedRequest.employeeId?.email || "N/A"}
               </div>
-              
+
               <div>
                 <strong>Leave Type:</strong> {selectedRequest.leaveTypeId?.name || "N/A"}
               </div>
-              
+
               <div>
                 <strong>Date Range:</strong> {formatDate(selectedRequest.startDate)} - {formatDate(selectedRequest.endDate)}
                 <br />
                 <strong>Total Days:</strong> {selectedRequest.totalDays}
               </div>
-              
+
               <div>
                 <strong>Description:</strong>
                 <p className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-2">
@@ -224,13 +226,17 @@ function ViewDepartmentLeaves() {
                                 )}
                               </td>
                               <td className="py-2 px-3">
-                                {adjustment.status === "adjusted" ? (
+                                {adjustment.substituteApproval?.status === "approved" ? (
                                   <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                                    ✓ Adjusted
+                                    ✓ Approved
+                                  </span>
+                                ) : adjustment.substituteApproval?.status === "rejected" ? (
+                                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium border border-red-200">
+                                    ✗ Rejected
                                   </span>
                                 ) : (
-                                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-medium">
-                                    ⚠ Pending
+                                  <span className="bg-amber-100 text-amber-800 px-2 py-1 rounded-full text-xs font-medium animate-pulse">
+                                    ⋯ Pending
                                   </span>
                                 )}
                               </td>

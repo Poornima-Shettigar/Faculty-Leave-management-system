@@ -100,8 +100,13 @@ const handleNotificationClick = (notification) => {
   setNotificationsOpen(false);
 
   // ============== substitute assignment navigation ============
-  if (notification.type === "substitute_assignment") {
-    window.location.href = "/faculty/dashboard/substitution-details";
+ if (notification.type === "substitute_assignment") {
+    if (user.role === "hod" || user.role === "director") {
+      window.location.href = "/hod/dashboard/substitution-details";
+    } else {
+      // faculty, teaching, non-teaching, etc.
+      window.location.href = "/faculty/dashboard/substitution-details";
+    }
     return;
   }
 

@@ -7,36 +7,36 @@ const Timetable = require("../Models/Timetable");
 //  ADD DEPARTMENT
 // =============================
 exports.addDepartment = async (req, res) => {
-    try {
-        const { departmentName, level } = req.body;
-console.log(req.body);
-        if (!departmentName || !level) {
-            return res.status(400).json({ message: "Department name and level (UG/PG) are required." });
-        }
-
-        const exists = await Department.findOne({ departmentName });
-        if (exists) {
-            return res.status(400).json({ message: "Department already exists." });
-        }
-
-        const newDepartment = new Department({
-            departmentName,
-            level,
-            totalClasses: 0,
-            classNames: []
-        });
-
-        await newDepartment.save();
-
-        return res.status(201).json({
-            message: "Department created successfully",
-            department: newDepartment
-        });
-
-    } catch (err) {
-        console.error("Error:", err);
-        res.status(500).json({ message: "Server Error" });
+  try {
+    const { departmentName, level } = req.body;
+    console.log(req.body);
+    if (!departmentName || !level) {
+      return res.status(400).json({ message: "Department name and level (UG/PG) are required." });
     }
+
+    const exists = await Department.findOne({ departmentName });
+    if (exists) {
+      return res.status(400).json({ message: "Department already exists." });
+    }
+
+    const newDepartment = new Department({
+      departmentName,
+      level,
+      totalClasses: 0,
+      classNames: []
+    });
+
+    await newDepartment.save();
+
+    return res.status(201).json({
+      message: "Department created successfully",
+      department: newDepartment
+    });
+
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 
@@ -44,83 +44,90 @@ console.log(req.body);
 //  GET ALL DEPARTMENTS
 // =============================
 exports.getDepartmentList = async (req, res) => {
-    try {
-        const departments = await Department.find().sort({ createdAt: -1 });
-        res.status(200).json(departments);
-    } catch (err) {
-        console.error("Error:", err);
-        res.status(500).json({ message: "Server Error" });
-    }
+  try {
+    const departments = await Department.find().sort({ createdAt: -1 });
+    res.status(200).json(departments);
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // =============================
 //  GET SINGLE DEPARTMENT
 // =============================
 exports.getDepartmentById = async (req, res) => {
-    try {
-        const department = await Department.findById(req.params.id);
+  try {
+    const { id } = req.params;
 
-        if (!department) {
-            return res.status(404).json({ message: "Department not found" });
-        }
-
-        res.status(200).json(department);
-
-    } catch (err) {
-        console.error("Error:", err);
-        res.status(500).json({ message: "Server Error" });
+    // Validate that id is a valid MongoDB ObjectId string
+    if (!id || typeof id !== "string" || id.length !== 24) {
+      return res.status(400).json({ message: `Invalid department ID: ${id}` });
     }
+
+    const department = await Department.findById(id);
+
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    res.status(200).json(department);
+
+  } catch (err) {
+    console.error("getDepartmentById Error:", err.message);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // =============================
 //  UPDATE / EDIT DEPARTMENT
 // =============================
 exports.updateDepartment = async (req, res) => {
-    try {
-        const { departmentName, level } = req.body;
+  try {
+    const { departmentName, level } = req.body;
 
-        if (!departmentName || !level) {
-            return res.status(400).json({ message: "Department name and level are required." });
-        }
-
-        const updatedDepartment = await Department.findByIdAndUpdate(
-            req.params.id,
-            { departmentName, level },
-            { new: true }
-        );
-
-        if (!updatedDepartment) {
-            return res.status(404).json({ message: "Department not found" });
-        }
-
-        res.status(200).json({
-            message: "Department updated successfully",
-            department: updatedDepartment
-        });
-
-    } catch (err) {
-        console.error("Error:", err);
-        res.status(500).json({ message: "Server Error" });
+    if (!departmentName || !level) {
+      return res.status(400).json({ message: "Department name and level are required." });
     }
+
+    const updatedDepartment = await Department.findByIdAndUpdate(
+      req.params.id,
+      { departmentName, level },
+      { new: true }
+    );
+
+    if (!updatedDepartment) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    res.status(200).json({
+      message: "Department updated successfully",
+      department: updatedDepartment
+    });
+
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // =============================
 //  DELETE DEPARTMENT
 // =============================
 exports.deleteDepartment = async (req, res) => {
-    try {
-        const deleted = await Department.findByIdAndDelete(req.params.id);
+  try {
+    const deleted = await Department.findByIdAndDelete(req.params.id);
 
-        if (!deleted) {
-            return res.status(404).json({ message: "Department not found" });
-        }
-
-        res.status(200).json({ message: "Department deleted successfully" });
-
-    } catch (err) {
-        console.error("Error:", err);
-        res.status(500).json({ message: "Server Error" });
+    if (!deleted) {
+      return res.status(404).json({ message: "Department not found" });
     }
+
+    res.status(200).json({ message: "Department deleted successfully" });
+
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // =============================

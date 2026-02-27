@@ -311,11 +311,41 @@ exports.addFaculty = async (req, res) => {
       password,
       dateOfJoining,
       departmentType,
-      employeeType
+      employeeType,
+      address,
+      highestQualification,
+      specialization,
+      yearsOfExperience
     } = req.body;
 
-    if (!name || !email || !employeeType || !departmentType || !dateOfJoining) {
-      return res.status(400).json({ message: "Required fields missing" });
+    if (!name || !email || !employeeType || !departmentType || !dateOfJoining || !phone || !address || !highestQualification || !specialization || yearsOfExperience === undefined) {
+      return res.status(400).json({ message: "All fields are required including address, qualification, specialization and experience." });
+    }
+
+    // Phone validation: ^9\d{9}$
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: "Enter a valid 10-digit Indian mobile number (starting with 6-9)." });
+    }
+
+    // Address validation: Min 10 chars
+    if (address.length < 10) {
+      return res.status(400).json({ message: "Address must be at least 10 characters long." });
+    }
+
+    // Highest Qualification: Letters, spaces, dots
+    if (!/^[a-zA-Z\s.]+$/.test(highestQualification)) {
+      return res.status(400).json({ message: "Highest Qualification can only contain letters, spaces, and dots." });
+    }
+
+    // Specialization: Letters, spaces
+    if (!/^[a-zA-Z\s]+$/.test(specialization)) {
+      return res.status(400).json({ message: "Specialization can only contain letters and spaces." });
+    }
+
+    // Years of Experience: 0-50
+    const exp = Number(yearsOfExperience);
+    if (isNaN(exp) || exp < 0 || exp > 50) {
+      return res.status(400).json({ message: "Years of Experience must be a number between 0 and 50." });
     }
 
     const existingUser = await User.findOne({ email });
@@ -349,7 +379,11 @@ exports.addFaculty = async (req, res) => {
       dateOfJoining,
       departmentType,
       employeeType,
-      role
+      role,
+      address,
+      highestQualification,
+      specialization,
+      yearsOfExperience: exp
     });
 
     await newFaculty.save();
@@ -402,6 +436,37 @@ exports.updateFaculty = async (req, res) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const { phone, address, highestQualification, specialization, yearsOfExperience } = req.body;
+
+    // Phone validation
+    if (phone && !/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: "Enter a valid 10-digit Indian mobile number (starting with 6-9)." });
+    }
+
+    // Address validation
+    if (address && address.length < 10) {
+      return res.status(400).json({ message: "Address must be at least 10 characters long." });
+    }
+
+    // Highest Qualification
+    if (highestQualification && !/^[a-zA-Z\s.]+$/.test(highestQualification)) {
+      return res.status(400).json({ message: "Highest Qualification can only contain letters, spaces, and dots." });
+    }
+
+    // Specialization
+    if (specialization && !/^[a-zA-Z\s]+$/.test(specialization)) {
+      return res.status(400).json({ message: "Specialization can only contain letters and spaces." });
+    }
+
+    // Years of Experience
+    if (yearsOfExperience !== undefined) {
+      const exp = Number(yearsOfExperience);
+      if (isNaN(exp) || exp < 0 || exp > 50) {
+        return res.status(400).json({ message: "Years of Experience must be a number between 0 and 50." });
+      }
+      req.body.yearsOfExperience = exp;
+    }
+
     Object.assign(user, req.body);
 
     if (req.body.password) {
@@ -416,17 +481,129 @@ exports.updateFaculty = async (req, res) => {
 };
 
 // =============================
-// DELETE FACULTY
+// UPDATE OWN PROFILE (Excluding Email)
 // =============================
-exports.deleteFaculty = async (req, res) => {
+exports.updateOwnProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    await User.findByIdAndDelete(id);
-    res.json({ message: "Faculty deleted successfully" });
+    const { name, phone, password, address, highestQualification, specialization, yearsOfExperience } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Phone validation
+    if (phone && !/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: "Enter a valid 10-digit Indian mobile number (starting with 6-9)." });
+    }
+
+    // Address validation
+    if (address && address.length < 10) {
+      return res.status(400).json({ message: "Address must be at least 10 characters long." });
+    }
+
+    // Highest Qualification
+    if (highestQualification && !/^[a-zA-Z\s.]+$/.test(highestQualification)) {
+      return res.status(400).json({ message: "Highest Qualification can only contain letters, spaces, and dots." });
+    }
+
+    // Specialization
+    if (specialization && !/^[a-zA-Z\s]+$/.test(specialization)) {
+      return res.status(400).json({ message: "Specialization can only contain letters and spaces." });
+    }
+
+    // Years of Experience
+    if (yearsOfExperience !== undefined) {
+      const exp = Number(yearsOfExperience);
+      if (isNaN(exp) || exp < 0 || exp > 50) {
+        return res.status(400).json({ message: "Years of Experience must be a number between 0 and 50." });
+      }
+      user.yearsOfExperience = exp;
+    }
+
+    // Update only allowed fields
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (address) user.address = address;
+    if (highestQualification) user.highestQualification = highestQualification;
+    if (specialization) user.specialization = specialization;
+
+    // Update password if provided
+    if (password) {
+      user.password = await bcrypt.hash(password, 10);
+    }
+
+    await user.save();
+
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.json({
+      message: "Profile updated successfully",
+      user: userResponse
+    });
   } catch (err) {
+    console.error("Error updating profile:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+// =============================
+// DELETE FACULTY
+// =============================
+const LeaveRequest = require("../Models/LeaveRequest");
+const Notification = require("../Models/Notification");
+const Timetable = require("../Models/Timetable");
+
+exports.deleteFaculty = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1) Delete the user
+    const deletedUser = await User.findByIdAndDelete(id);
+    if (!deletedUser) {
+      return res.status(404).json({ message: "Faculty not found" });
+    }
+
+    // 2) Delete all EmployeeLeave allocations for this faculty
+    await EmployeeLeave.deleteMany({ employeeId: id });
+
+    // 3) Find all leave requests raised by this faculty
+    const requests = await LeaveRequest.find({ employeeId: id }).select("_id");
+    const requestIds = requests.map((r) => r._id);
+
+    if (requestIds.length > 0) {
+      // 4) Delete those leave requests
+      await LeaveRequest.deleteMany({ _id: { $in: requestIds } });
+
+      // 5) Delete all notifications linked to those leave requests
+      await Notification.deleteMany({ leaveRequestId: { $in: requestIds } });
+    }
+
+    // 6) Delete notifications where this user is the recipient (e.g., substitute, approver)
+    await Notification.deleteMany({ userId: id });
+
+    // 7) Optional: clear this faculty from timetable and subjects
+    // Remove this faculty as owner/assigned in Subject
+    await Subject.updateMany(
+      { faculty: id },
+      { $unset: { faculty: "" } }
+    );
+
+    // Remove as faculty or substitute in Timetable entries
+    await Timetable.updateMany(
+      { "timetable.faculty": id },
+      { $set: { "timetable.$[p].faculty": null } },
+      { arrayFilters: [{ "p.faculty": id }] }
+    );
+
+    res.json({ message: "Faculty and all related data deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting faculty:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
 
 // =============================
 // GET FACULTY BY DEPARTMENT
@@ -448,15 +625,19 @@ exports.getFacultyByDepartment = async (req, res) => {
 // =============================
 exports.getFacultyById = async (req, res) => {
   try {
-    const faculty = await User.findById(req.params.id).populate(
-      "departmentType",
-      "departmentName level"
-    );
+    const faculty = await User.findById(req.params.id)
+      .populate({
+        path: 'departmentType',
+        select: 'departmentName level'
+      });
+
     if (!faculty)
       return res.status(404).json({ message: "Faculty not found" });
 
+    console.log("Faculty data with department:", faculty);
     res.json(faculty);
   } catch (err) {
+    console.error("Error getting faculty by ID:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -519,7 +700,7 @@ exports.getAdminDashboardStats = async (req, res) => {
       // If you want HODs included in the teaching count:
       const teaching = await User.countDocuments({
         departmentType: dept._id,
-        role: { $in: ["teaching", "hod","director"] } // Include HOD here
+        role: { $in: ["teaching", "hod", "director"] } // Include HOD here
       });
 
       const nonTeaching = await User.countDocuments({
@@ -575,6 +756,35 @@ exports.getHodDepartmentFaculty = async (req, res) => {
     res.json(facultyWithSubjects);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// =============================
+// ✅ CHECK PHONE UNIQUENESS
+// =============================
+exports.checkPhoneUniqueness = async (req, res) => {
+  try {
+    const { phone } = req.params;
+    
+    // Validate phone format
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: "Invalid phone number format" });
+    }
+
+    // Check if phone number exists
+    const existingUser = await User.findOne({ phone });
+    
+    if (existingUser) {
+      return res.json({ 
+        exists: true, 
+        userId: existingUser._id 
+      });
+    }
+    
+    res.json({ exists: false });
+  } catch (err) {
+    console.error("Error checking phone uniqueness:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };

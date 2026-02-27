@@ -1,173 +1,356 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, NavLink } from "react-router-dom";
+import { Button } from "../../Components/UI";
 import Topbar from "./Topbar";
 
-// 1. Topbar Component - Import from separate file instead
-// This Topbar is now handled by the separate Topbar.jsx component
-
-// 2. Sidebar Component
 function Sidebar() {
   const navigate = useNavigate();
-  let userRole = null;
-  try {
-    const userString = localStorage.getItem("user");
-    if (userString) {
-      const user = JSON.parse(userString);
-      if (user && user.role) {
-        userRole = user.role;
-      }
-    }
-  } catch (e) {
-    console.error("Failed to parse user for sidebar", e);
-  }
+
+  const [userRole, setUserRole] = useState(null);
+  const [departmentType, setDepartmentType] = useState(null);
+  const [departmentCategory, setDepartmentCategory] = useState(null);
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [deptMenuOpen, setDeptMenuOpen] = useState(false);
-  
   const [SubjectMenuOpen, setSubjectMenuOpen] = useState(false);
   const [leaveMenuOpen, setLeaveMenuOpen] = useState(false);
   const [timetableMenuOpen, setTimetableMenuOpen] = useState(false);
+  const allowedHodDepartments = ["MCA", "MBA", "BBA", "BCOM", "BCA", "BSC", "BA", "MCc", "BHM", "MCOM"];
+  const serviceHodDepartments = ["LIBRARY", "MANAGEMENT", "CLEANING", "OTHER", "CLERK"];
+
+
+  useEffect(() => {
+    try {
+      const userString = localStorage.getItem("user");
+      if (userString) {
+        const user = JSON.parse(userString);
+        if (user && user.role) {
+          setUserRole(user.role.toLowerCase());
+
+          // departmentType can be an object {_id, departmentName} or a plain string ID
+          const deptType = user.departmentType;
+          if (deptType && typeof deptType === "object") {
+            // Already have the full object — no API call needed
+            setDepartmentType(deptType._id?.toString() || null);
+            if (deptType.departmentName) {
+              setDepartmentCategory(deptType.departmentName);
+            }
+          } else if (deptType && typeof deptType === "string") {
+            // Plain ObjectId string
+            setDepartmentType(deptType);
+          } else if (user.departmentId) {
+            // Fallback: use the dedicated departmentId field
+            setDepartmentType(user.departmentId);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse user for sidebar", e);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    // Only fetch if we have a valid 24-char ObjectId string and no name yet
+    if (!departmentType || typeof departmentType !== "string" || departmentType.length !== 24) return;
+    if (departmentCategory) return; // already set from the user object
+
+    const fetchDepartment = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/api/department/get-by-id/${departmentType}`
+        );
+        if (!res.ok) {
+          console.error("Failed to fetch department", res.status);
+          return;
+        }
+        const dept = await res.json();
+        setDepartmentCategory(dept.departmentName || null);
+      } catch (err) {
+        console.error("Error fetching department", err);
+      }
+    };
+
+    fetchDepartment();
+  }, [departmentType, departmentCategory]);
 
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
   };
 
+  const NavLinkItem = ({ to, children, icon = null }) => (
+    <NavLink
+      to={to}
+      end
+      className={({ isActive }) =>
+        `amazing-nav-link ${isActive ? 'active' : ''}`
+      }
+    >
+      {icon && <span className="mr-3">{icon}</span>}
+      {children}
+    </NavLink>
+  );
+  const contains = (text, value) => {
+    return text?.includes(value);
+  };
+  const MenuSection = ({ title, children, isOpen, onToggle, icon = null }) => (
+    <div>
+      <button
+        onClick={onToggle}
+        className="w-full amazing-nav-link justify-between"
+      >
+        <div className="flex items-center">
+          {icon && <span className="mr-3">{icon}</span>}
+          {title}
+        </div>
+        <svg
+          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="ml-4 mt-1 space-y-1">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+  const normalizedDept = departmentCategory?.trim().toUpperCase();
+  console.log("Sidebar Debug:", { userRole, normalizedDept, departmentCategory });
   return (
-    <nav className="sidebar">
-      <h2 className="sidebar-title">{userRole ? userRole.toUpperCase() : 'USER'} PANEL</h2>
+    <nav className="w-full h-screen bg-white border-r-2 border-purple-200 flex flex-col shadow-2xl">
+      <div className="p-6 border-b-2 border-purple-100 amazing-card-gradient" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <h2 className="text-xl font-bold text-white">
+          {userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : "User"} Panel
+        </h2>
+        {departmentCategory && (
+          <p className="text-blue-100 text-xs font-semibold uppercase mt-1">
+            Dept: {departmentCategory}
+          </p>
+        )}
+        <p className="text-sm text-blue-100 mt-1 opacity-80">Leave Management System</p>
+      </div>
 
-      <ul className="sidebar-menu">
-        <li>
-          <NavLink to="home" end>Dashboard</NavLink>
-        </li>
+      <div className="flex-1 overflow-y-auto p-4 space-y-2" style={{ background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%)' }}>
+        <NavLinkItem to="home" icon="🏠">
+          Dashboard
+        </NavLinkItem>
 
         {/* ADMIN MENU */}
         {userRole === "admin" && (
           <>
-            <li className="menu-parent" onClick={() => setUserMenuOpen(!userMenuOpen)}>
-              Manage Users ▾
-            </li>
-            {userMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="add-user">Add User</NavLink></li>
-                <li><NavLink to="delete-user">Delete/Edit User</NavLink></li>
-              </ul>
-            )}
-            <li className="menu-parent" onClick={() => setDeptMenuOpen(!deptMenuOpen)}>
-              Manage Department ▾
-            </li>
-            {deptMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="add-dept">Add Department</NavLink></li>
-                <li><NavLink to="delete-dept">Delete/Edit Department</NavLink></li>
-              </ul>
-            )}
-            
-            <li className="menu-parent" onClick={() => setLeaveMenuOpen(!leaveMenuOpen)}>
-              Allocate Leave ▾
-            </li>
-            {leaveMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="leave-add">Add Leave</NavLink></li>
-                <li><NavLink to="leave-delete">Delete/Edit Leave</NavLink></li>
-              </ul>
-            )}
-            <li><NavLink to="leave-report">Report</NavLink></li>
-           
+            <MenuSection
+              title="Manage Users"
+              isOpen={userMenuOpen}
+              onToggle={() => setUserMenuOpen(!userMenuOpen)}
+              icon="👥"
+            >
+              <NavLinkItem to="add-user">Add User</NavLinkItem>
+              <NavLinkItem to="delete-user">Delete/Edit User</NavLinkItem>
+            </MenuSection>
+
+            <MenuSection
+              title="Manage Department"
+              isOpen={deptMenuOpen}
+              onToggle={() => setDeptMenuOpen(!deptMenuOpen)}
+              icon="🏢"
+            >
+              <NavLinkItem to="add-dept">Add Department</NavLinkItem>
+              <NavLinkItem to="delete-dept">Delete/Edit Department</NavLinkItem>
+            </MenuSection>
+
+            <MenuSection
+              title="Allocate Leave"
+              isOpen={leaveMenuOpen}
+              onToggle={() => setLeaveMenuOpen(!leaveMenuOpen)}
+              icon="📅"
+            >
+              <NavLinkItem to="leave-add">Add Leave</NavLinkItem>
+              <NavLinkItem to="leave-delete">Delete/Edit Leave</NavLinkItem>
+            </MenuSection>
+
+            <MenuSection
+              title="Reports"
+              isOpen={timetableMenuOpen}
+              onToggle={() => setTimetableMenuOpen(!timetableMenuOpen)}
+              icon="📊"
+            >
+              <NavLinkItem to="leave-report">Leave Reports</NavLinkItem>
+            </MenuSection>
+
+            <NavLinkItem to="profile" icon="👤">
+              My Profile
+            </NavLinkItem>
           </>
         )}
 
         {/* FACULTY MENU */}
-        {userRole === "teaching" && (
+        {(userRole === "teaching") && (
           <>
-            {/* <li><NavLink to="view-timetable">My Timetable</NavLink></li> */}
-             <li><NavLink to="view-subject">My Subject</NavLink></li>
-            <li><NavLink to="apply-leave">Apply Leave</NavLink></li>
-            <li><NavLink to="my-leave-status">Leave Status</NavLink></li>
-<li><NavLink to="substitution-details">Substitution Details</NavLink></li>
+            <NavLinkItem to="apply-leave" icon="✍️">
+              Apply Leave
+            </NavLinkItem>
+            <NavLinkItem to="my-leave-status" icon="📋">
+              Leave Status
+            </NavLinkItem>
+            <NavLinkItem to="view-subject" icon="📚">
+              My Subjects
+            </NavLinkItem>
+            <NavLinkItem to="my-timetable" icon="📅">
+              Timetable
+            </NavLinkItem>
+            <NavLinkItem to="substitution-details" icon="🔄">
+              Substitution
+            </NavLinkItem>
+            <NavLinkItem to="profile" icon="👤">
+              My Profile
+            </NavLinkItem>
           </>
         )}
-  {userRole === "non-teaching" && (
+        {(userRole === "non-teaching") && (
           <>
-            {/* <li><NavLink to="view-timetable">My Timetable</NavLink></li> */}
-            <li><NavLink to="apply-leave">Apply Leave</NavLink></li>
-            <li><NavLink to="my-leave-status">Leave Status</NavLink></li>
+            <NavLinkItem to="apply-leave" icon="✍️">
+              Apply Leave
+            </NavLinkItem>
+            <NavLinkItem to="my-leave-status" icon="📋">
+              Leave Status
+            </NavLinkItem>
+            {/* <NavLinkItem to="view-subject" icon="📚">
+              My Subjects
+            </NavLinkItem>
+            <NavLinkItem to="my-timetable" icon="📅">
+              Timetable
+            </NavLinkItem>
+            <NavLinkItem to="substitution-details" icon="🔄">
+              Substitution
+            </NavLinkItem> */}
+            <NavLinkItem to="profile" icon="👤">
+              My Profile
+            </NavLinkItem>
           </>
         )}
 
         {/* HOD MENU */}
-        {userRole === "hod" && (
+        {userRole?.toLowerCase() === "hod" && (
           <>
-            <li><NavLink to="faculty-list">View Faculty</NavLink></li>
-            <li><NavLink to="view-department-leaves">Approve Leave</NavLink></li>
-            <li><NavLink to="approve-leave">Pending leave Leave</NavLink></li>
 
-<li><NavLink to="apply-leave-hod">Apply Leave</NavLink></li>
-<li><NavLink to="my-leave-status">Leave Status</NavLink></li>
-            {/* <li><NavLink to="dept-reports">Department Reports</NavLink></li> */}
-           <li className="menu-parent" onClick={() => setSubjectMenuOpen(!SubjectMenuOpen)}>
-              Manage Subject ▾
-            </li>
-            {SubjectMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="add-sub">Add Subject</NavLink></li>
-                <li><NavLink to="delete-sub">Delete/Edit Subject</NavLink></li>
-              </ul>
-            )}
-          <li className="menu-parent" onClick={() => setTimetableMenuOpen(!timetableMenuOpen)}>
-              Allocate Timetable ▾
-            </li>
-            {timetableMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="timetable-add">Add Timetable</NavLink></li>
-                <li><NavLink to="timetable-view">Delete/Edit Timetable</NavLink></li>
-              </ul>
-            )}
-             <li className="menu-parent" onClick={() => setDeptMenuOpen(!deptMenuOpen)}>
-              Manage Class ▾
-            </li>
-            {deptMenuOpen && (
-              <ul className="submenu">
-                <li><NavLink to="add-class">Add Class</NavLink></li>
-                <li><NavLink to="delete-class">Delete/Edit Class</NavLink></li>
-              </ul>
-            )}
-            <li><NavLink to="substitution-details">Substitution Details</NavLink></li>
 
+            <MenuSection
+              title="Manage Faculty"
+              isOpen={userMenuOpen}
+              onToggle={() => setUserMenuOpen(!userMenuOpen)}
+              icon="👥"
+            >
+              <NavLinkItem to="faculty-list">View Faculty</NavLinkItem>
+            </MenuSection>
+
+            <MenuSection
+              title="Leave Management"
+              isOpen={leaveMenuOpen}
+              onToggle={() => setLeaveMenuOpen(!leaveMenuOpen)}
+              icon="📊"
+            >
+              <NavLinkItem to="approve-leave">
+                Approve Leave
+              </NavLinkItem>
+              <NavLinkItem to="view-department-leaves">Department Leaves</NavLinkItem>
+{normalizedDept && serviceHodDepartments.some(d => contains(normalizedDept, d)) ? (
+  <NavLinkItem to="apply-leave">
+    Apply Leave
+  </NavLinkItem>
+) : (
+  <NavLinkItem to="apply-leave-hod">
+    Apply Leave
+  </NavLinkItem>
+)}            </MenuSection>
+
+            {/* Academic section: Show if NOT a service department */}
+            {normalizedDept && !serviceHodDepartments.some(d => contains(normalizedDept, d)) && (
+              <MenuSection
+                title="Academic"
+                isOpen={SubjectMenuOpen}
+                onToggle={() => setSubjectMenuOpen(!SubjectMenuOpen)}
+                icon="📚"
+              >
+                <NavLinkItem to="add-sub">Add Subject</NavLinkItem>
+                <NavLinkItem to="delete-sub">Manage Subjects</NavLinkItem>
+                <NavLinkItem to="timetable-add">Add Timetable</NavLinkItem>
+                <NavLinkItem to="timetable-view">Manage Timetable</NavLinkItem>
+                <NavLinkItem to="add-class">Add Class</NavLinkItem>
+                <NavLinkItem to="delete-class">Manage Class</NavLinkItem>
+
+
+              </MenuSection>
+            )}
+
+            <NavLinkItem to="my-leave-status" icon="📋">
+              My Leave Status
+            </NavLinkItem>
+
+            {normalizedDept && !serviceHodDepartments.some(d => contains(normalizedDept, d)) && (
+              <NavLinkItem to="substitution-details" icon="🔄">
+                Substitution Requests
+              </NavLinkItem>
+            )}
+            <NavLinkItem to="profile" icon="👤">
+              My Profile
+            </NavLinkItem>
           </>
         )}
 
         {/* DIRECTOR MENU */}
-        {userRole === "director" && (
+        {userRole?.toLowerCase() === "director" && (
           <>
-            <li><NavLink to="all-dept-report">All Department Reports</NavLink></li>
-            <li><NavLink to="analytics">Analytics Dashboard</NavLink></li>
-            <li><NavLink to="director-settings">Director Settings</NavLink></li>
-            <li><NavLink to="approve-leave">Leave Request</NavLink></li>
+            <NavLinkItem to="all-dept-report" icon="📊">
+              All Department Reports
+            </NavLinkItem>
+            <NavLinkItem to="department-faculty" icon="👥">
+              Department Faculty & Leaves
+            </NavLinkItem>
+            <NavLinkItem to="approve-leave" icon="✅">
+              Leave Requests
+            </NavLinkItem>
+            <NavLinkItem to="profile" icon="👤">
+              My Profile
+            </NavLinkItem>
           </>
         )}
-      </ul>
-      <button onClick={handleLogout} className="sidebar-button" style={{marginTop: "2rem"}}>
-        Logout
-      </button>
+      </div>
+
+      <div className="p-4 border-t-2 border-purple-100 bg-white">
+        <Button
+          onClick={handleLogout}
+          variant="outline"
+          className="w-full amazing-btn-danger"
+        >
+          Logout
+        </Button>
+      </div>
     </nav>
   );
 }
 
-// 3. DashboardLayout (Main Export)
-// This combines the pieces into the dashboard layout.
 function DashboardLayout() {
   return (
-    <div className="dashboard-container">
-      <Sidebar />
-      <div className="main-content">
+    <div className="min-h-screen flex" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      {/* Fixed Sidebar */}
+      <div className="w-64 flex-shrink-0 fixed left-0 top-0 h-full z-50">
+        <Sidebar />
+      </div>
+
+      {/* Main Content with Left Margin */}
+      <div className="flex-1 flex flex-col ml-64" style={{ background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', minHeight: '100vh' }}>
         <Topbar />
-        <div className="page-content">
-          <div className="bg-white p-6 rounded-lg shadow-md" style={{backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'}}>
+        <main className="flex-1 p-6">
+          <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

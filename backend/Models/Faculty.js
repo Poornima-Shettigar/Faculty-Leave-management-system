@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const facultySchema = new mongoose.Schema({
   name: { type: String, required: true },
 
-  role: { 
+  role: {
     type: String,
     enum: ["Faculty", "HOD", "Director"],
     default: "Faculty",
@@ -16,10 +16,10 @@ const facultySchema = new mongoose.Schema({
 
   joinDate: { type: Date, required: true },
 
-  department: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  department: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: "Department",
-    required: true 
+    required: true
   }
 });
 

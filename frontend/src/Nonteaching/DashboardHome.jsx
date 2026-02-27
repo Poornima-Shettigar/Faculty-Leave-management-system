@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
+import ChatbotWidget from "../Components/ChatbotWidget";
+
 
 function DashboardHome() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
@@ -685,7 +687,31 @@ useEffect(() => {
         </div>
       </div>
     );
-  };
+  };  
+
+/* =======================
+   FACULTY LAYOUT
+======================= */
+const FacultyLayout = () => {
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Sidebar */}
+      {/* <aside className="w-64 bg-blue-900 text-white p-4">
+        <h2 className="font-bold text-lg mb-4">Faculty Panel</h2>
+        <Sidebar />
+      </aside> */}
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 relative">
+        {/* 👇 Faculty Dashboard Rendered Here */}
+        <FacultyDashboard />
+
+        {/* Chatbot */}
+        {/* <ChatbotWidget /> */}
+      </main>
+    </div>
+  );
+};
 
   const HodDashboard = () => {
     const absenceDetails = stats.absenceDetails || [];
@@ -1022,7 +1048,7 @@ useEffect(() => {
         {role === "admin" && <AdminDashboard />}
         {role === "hod" && <HodDashboard />}
         {(role === "teaching" || role === "non-teaching") && (
-          <FacultyDashboard />
+          <FacultyLayout />
         )}
         {role === "director" && <DirectorDashboard />}
       </div>

@@ -35,7 +35,13 @@ function ApplyLeave() {
       setPeriodAdjustments([]);
     }
   }, [startDate, endDate, user.role]);
-
+  const getTodayLocal = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
   const loadLeaveTypes = async () => {
     try {
       const res = await axios.get("http://localhost:5000/api/leaveType/list");
@@ -70,11 +76,11 @@ function ApplyLeave() {
       const fetchedPeriods = res.data.periods || [];
       setPeriods(fetchedPeriods);
       setAvailableSubstitutes(res.data.availableSubstitutes || []);
-      
+
       // Fetch subjects for all unique classes
       const uniqueClasses = [...new Set(fetchedPeriods.map(p => ({ dept: p.departmentId, class: p.className })))];
       const subjectsData = {};
-      
+
       for (const { dept, class: className } of uniqueClasses) {
         try {
           // Fetch all subjects for the class (all semesters)
@@ -87,7 +93,7 @@ function ApplyLeave() {
         }
       }
       setSubjectsMap(subjectsData);
-      
+
       // Initialize period adjustments
       const adjustments = fetchedPeriods.map((p) => ({
         ...p,
@@ -125,20 +131,42 @@ function ApplyLeave() {
       return;
     }
 
-    if (new Date(endDate) < new Date(startDate)) {
-      setMessage({ type: "error", text: "End date must be after start date" });
+    const isSunday = (date) => new Date(date).getDay() === 0;
+    if (isSunday(startDate) || (!isHalfDay && isSunday(endDate))) {
+      setMessage({ type: "error", text: "Start or end date cannot be a Sunday" });
       return;
     }
 
-    // For teaching staff, check if all periods are adjusted
-    if (user.role === "teaching" && periods.length > 0) {
+    if (new Date(endDate) < new Date(startDate)) {
+      setMessage({ type: "error", text: "End date must be after or same as start date" });
+      return;
+    }
+
+    // Check if any Sunday in range
+    if (!isHalfDay) {
+      let current = new Date(startDate);
+      let end = new Date(endDate);
+      while (current <= end) {
+        if (current.getDay() === 0) {
+          setMessage({ type: "error", text: "Leave period cannot include Sundays" });
+          return;
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
+    const selectedLeaveTypeData = leaveTypes.find(lt => lt._id === selectedLeaveType);
+    const isEmergency = selectedLeaveTypeData?.name?.toLowerCase().includes("emergency") || description.toLowerCase().includes("emergency");
+
+    // For HOD, check if all periods are adjusted
+    if (user.role === "hod" && periods.length > 0 && !isEmergency) {
       const unadjustedPeriods = periodAdjustments.filter(
         p => !p.substituteFacultyId || p.status !== "adjusted"
       );
       if (unadjustedPeriods.length > 0) {
-        setMessage({ 
-          type: "error", 
-          text: `Please assign substitute faculty for all ${unadjustedPeriods.length} pending period(s) before submitting.` 
+        setMessage({
+          type: "error",
+          text: `Please assign substitute faculty for all ${unadjustedPeriods.length} pending period(s) before submitting.`
         });
         return;
       }
@@ -159,8 +187,9 @@ function ApplyLeave() {
           isCasualLeaveSelected() && isHalfDay && startDate === endDate,
         halfDaySession:
           isCasualLeaveSelected() && isHalfDay && startDate === endDate
-            ? halfDaySession
-            : null
+            ? (halfDaySession === "FN" ? "morning" : "afternoon")
+            : null,
+        totalDays: calculateDays()
       };
 
       const res = await axios.post(
@@ -205,17 +234,20 @@ function ApplyLeave() {
   };
 
   const calculateDays = () => {
+    if (isCasualLeaveSelected() && isHalfDay && startDate === endDate) {
+      return 0.5;
+    }
     if (startDate && endDate && startDate <= endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      const diffTime = Math.abs(end - start);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-      if (isCasualLeaveSelected() && isHalfDay && startDate === endDate) {
-        return 0.5;
+      let totalDays = 0;
+      let current = new Date(startDate);
+      let end = new Date(endDate);
+      while (current <= end) {
+        if (current.getDay() !== 0) {
+          totalDays += 1;
+        }
+        current.setDate(current.getDate() + 1);
       }
-
-      return diffDays;
+      return totalDays;
     }
     return 0;
   };
@@ -245,11 +277,10 @@ function ApplyLeave() {
       {/* Message */}
       {message.text && (
         <div
-          className={`mb-6 p-4 rounded-lg ${
-            message.type === "error"
-              ? "bg-red-100 text-red-800 border border-red-300"
-              : "bg-green-100 text-green-800 border border-green-300"
-          }`}
+          className={`mb-6 p-4 rounded-lg ${message.type === "error"
+            ? "bg-red-100 text-red-800 border border-red-300"
+            : "bg-green-100 text-green-800 border border-green-300"
+            }`}
         >
           {message.text}
         </div>
@@ -289,8 +320,8 @@ function ApplyLeave() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              min={new Date().toISOString().split("T")[0]}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              // min={new Date().toISOString().split("T")[0]}
+              min={startDate || getTodayLocal()} className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
           </div>
@@ -416,7 +447,7 @@ function ApplyLeave() {
                     </div>
                   );
                 })()}
-                
+
                 {/* Group periods by date */}
                 {(() => {
                   const periodsByDate = {};
@@ -460,7 +491,7 @@ function ApplyLeave() {
                               {datePeriods.map((period) => {
                                 const subjectName = subjectsMap[period.subjectId] || "N/A";
                                 const isAdjusted = period.substituteFacultyId && period.status === "adjusted";
-                                
+
                                 return (
                                   <tr key={period.index} className={isAdjusted ? "bg-green-50" : "bg-white hover:bg-gray-50"}>
                                     <td className="px-4 py-3 text-sm font-medium">
@@ -472,11 +503,10 @@ function ApplyLeave() {
                                       <select
                                         value={period.substituteFacultyId || ""}
                                         onChange={(e) => updateSubstitute(period.index, e.target.value)}
-                                        className={`w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 ${
-                                          isAdjusted 
-                                            ? "border-green-300 bg-white" 
-                                            : "border-red-300 bg-red-50"
-                                        }`}
+                                        className={`w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 ${isAdjusted
+                                          ? "border-green-300 bg-white"
+                                          : "border-red-300 bg-red-50"
+                                          }`}
                                       >
                                         <option value="">-- Select Substitute --</option>
                                         {availableSubstitutes.map((sub) => (

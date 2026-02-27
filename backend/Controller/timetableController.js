@@ -1,6 +1,32 @@
 const Timetable = require("../Models/Timetable");
 const Department = require("../Models/Department");
 const User = require("../Models/User");
+// ------------------- CHECK TIMETABLE EXISTS -------------------
+exports.checkTimetableExists = async (req, res) => {
+  try {
+    const { departmentType, className, semester } = req.query;
+
+    if (!departmentType || !className || !semester) {
+      return res.status(400).json({ exists: false, msg: "Missing parameters" });
+    }
+
+    const existing = await Timetable.findOne({
+      departmentType,
+      className,
+      semester: Number(semester)
+    });
+
+    if (existing) {
+      return res.json({ exists: true });
+    }
+
+    return res.json({ exists: false });
+
+  } catch (error) {
+    console.error("checkTimetableExists Error:", error);
+    return res.status(500).json({ exists: false, msg: "Server error" });
+  }
+};
 
 // Utility to format timetable for frontend as array
 const formatToTable = (timetableArray) => {
@@ -18,6 +44,29 @@ const formatToTable = (timetableArray) => {
 };
 
 // ------------------- CREATE TIMETABLE -------------------
+// exports.createTimetable = async (req, res) => {
+//   try {
+//     console.log("Incoming Data:", req.body);
+//     const { departmentType, className, semester, timetable } = req.body;
+
+//     if (!departmentType || !className || !semester || !timetable || !timetable.length) {
+//       return res.status(400).json({ msg: "All fields are required including semester" });
+//     }
+
+//     const newTimetable = new Timetable({
+//       departmentType,
+//       className,
+//       semester: Number(semester),
+//       timetable,
+//     });
+
+//     await newTimetable.save();
+//     res.status(201).json({ msg: "Timetable saved successfully" });
+//   } catch (err) {
+//     console.error("Timetable Error:", err);
+//     res.status(500).json({ msg: "Internal Server Error", error: err.message });
+//   }
+// };
 exports.createTimetable = async (req, res) => {
   try {
     console.log("Incoming Data:", req.body);
@@ -41,7 +90,6 @@ exports.createTimetable = async (req, res) => {
     res.status(500).json({ msg: "Internal Server Error", error: err.message });
   }
 };
-
 // ------------------- GET TIMETABLE -------------------
 exports.getTimetable = async (req, res) => {
   try {
@@ -104,29 +152,109 @@ console.log(timetableDoc)
 
 
 // ------------------- UPDATE ONE PERIOD -------------------
+// exports.updateOnePeriod = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { day, period, subject, faculty } = req.body;
+
+//     const tt = await Timetable.findById(id);
+//     if (!tt) return res.status(404).json({ msg: "Timetable not found" });
+
+//     const index = tt.timetable.findIndex((x) => x.day === day && x.period === period);
+
+//     if (index !== -1) {
+//       tt.timetable[index] = { day, period, subject, faculty };
+//     } else {
+//       tt.timetable.push({ day, period, subject, faculty });
+//     }
+
+//     await tt.save();
+//     res.json({ msg: "Period updated successfully" });
+//   } catch (err) {
+//     console.error("updateOnePeriod Error:", err);
+//     res.status(500).json({ msg: "Server Error", err });
+//   }
+// };
+// ------------------- UPDATE ONE PERIOD -------------------
+// ------------------- UPDATE ONE PERIOD -------------------
 exports.updateOnePeriod = async (req, res) => {
   try {
     const { id } = req.params;
-    const { day, period, subject, faculty } = req.body;
+    // expect subjectId, facultyId from frontend
+    const { day, period, subjectId, facultyId } = req.body;
+
+    if (!day || !period) {
+      return res.status(400).json({ msg: "Day and period are required" });
+    }
 
     const tt = await Timetable.findById(id);
     if (!tt) return res.status(404).json({ msg: "Timetable not found" });
 
-    const index = tt.timetable.findIndex((x) => x.day === day && x.period === period);
+    const pNum = Number(period);
+
+    const index = tt.timetable.findIndex(
+      (x) => x.day === day && x.period === pNum
+    );
+
+    const entry = {
+      day,
+      period: pNum,
+      subject: subjectId || null,   // stored as ObjectId
+      faculty: facultyId || null,   // stored as ObjectId
+    };
 
     if (index !== -1) {
-      tt.timetable[index] = { day, period, subject, faculty };
+      tt.timetable[index] = entry;
     } else {
-      tt.timetable.push({ day, period, subject, faculty });
+      tt.timetable.push(entry);
     }
 
     await tt.save();
-    res.json({ msg: "Period updated successfully" });
+
+    const timetableDoc = await Timetable.findById(id)
+      .populate({
+        path: "timetable.subject",
+        select: "subjectName subjectCode",
+      })
+      .populate({
+        path: "timetable.faculty",
+        select: "name email",
+      });
+
+    const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const PERIODS = [1, 2, 3, 4, 5, 6];
+
+    const formatted = DAYS.flatMap((d) =>
+      PERIODS.map((p) => {
+        const entry = timetableDoc.timetable.find(
+          (x) => x.day === d && x.period === p
+        );
+        return {
+          day: d,
+          period: p,
+          subject: entry?.subject ? entry.subject.subjectName : null,
+          faculty: entry?.faculty ? entry.faculty.name : null,
+          subjectId: entry?.subject?._id || null,
+          facultyId: entry?.faculty?._id || null,
+        };
+      })
+    );
+
+    return res.json({
+      msg: "Period updated successfully",
+      _id: timetableDoc._id,
+      departmentType: timetableDoc.departmentType,
+      className: timetableDoc.className,
+      semester: timetableDoc.semester,
+      timetable: formatted,
+    });
   } catch (err) {
     console.error("updateOnePeriod Error:", err);
-    res.status(500).json({ msg: "Server Error", err });
+    return res.status(500).json({ msg: "Server Error", error: err.message });
   }
 };
+
+
 
 // ------------------- DELETE DAY -------------------
 exports.deleteDay = async (req, res) => {

@@ -47,17 +47,23 @@ function AllDeptReport() {
 
       {!selectedDept ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {departments.map((dept) => (
-            <div
-              key={dept._id}
-              className="bg-blue-50 border border-blue-200 rounded-lg p-4 cursor-pointer hover:bg-blue-100 transition-colors"
-              onClick={() => loadFacultyForDept(dept._id)}
-            >
-              <h3 className="text-lg font-medium text-blue-800">{dept.departmentName}</h3>
-              <p className="text-sm text-blue-600">Level: {dept.level}</p>
-              <p className="text-sm text-blue-600">Total Classes: {dept.totalClasses}</p>
-            </div>
-          ))}
+          {departments.map((dept) => {
+            const name = (dept.departmentName || "").toLowerCase();
+            const isNonTeaching = ["management", "cleaning", "library"].some(kw => name.includes(kw));
+            return (
+              <div
+                key={dept._id}
+                className="bg-blue-50 border border-blue-200 rounded-lg p-4 cursor-pointer hover:bg-blue-100 transition-colors"
+                onClick={() => loadFacultyForDept(dept._id)}
+              >
+                <h3 className="text-lg font-medium text-blue-800">{dept.departmentName}</h3>
+                <p className="text-sm text-blue-600">Level: {dept.level}</p>
+                {!isNonTeaching && (
+                  <p className="text-sm text-blue-600">Total Classes: {dept.totalClasses}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div>
@@ -77,69 +83,60 @@ function AllDeptReport() {
             <p className="text-gray-500">No faculty found in this department.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Faculty
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Subject
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Class
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Semester
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {facultyList.map((faculty) =>
-                    faculty.subjects.length > 0 ? (
-                      faculty.subjects.map((subj, idx) => (
-                        <tr key={`${faculty._id}-${idx}`} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {faculty.name}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {faculty.email}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {subj.subjectName}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {subj.className}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {subj.semester}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr key={faculty._id}>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {faculty.name}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {faculty.email}
-                        </td>
-                        <td
-                          colSpan="3"
-                          className="px-4 py-3 text-sm text-gray-400 italic"
-                        >
-                          No subjects assigned
-                        </td>
+              {/* Determine if current dept is non-teaching type */}
+              {(() => {
+                const currentDeptName = departments.find(d => d._id === selectedDept)?.departmentName || "";
+                const isNonTeachingDept = ["management", "cleaning", "library"].some(kw =>
+                  currentDeptName.toLowerCase().includes(kw)
+                );
+                return (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Faculty</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                        {!isNonTeachingDept && (
+                          <>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Semester</th>
+                          </>
+                        )}
                       </tr>
-                    )
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {facultyList.map((faculty) =>
+                        isNonTeachingDept ? (
+                          // Non-teaching dept: just show name + email
+                          <tr key={faculty._id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{faculty.name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500">{faculty.email}</td>
+                          </tr>
+                        ) : faculty.subjects.length > 0 ? (
+                          faculty.subjects.map((subj, idx) => (
+                            <tr key={`${faculty._id}-${idx}`} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm font-medium text-gray-900">{faculty.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-500">{faculty.email}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{subj.subjectName}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{subj.className}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{subj.semester}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr key={faculty._id}>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{faculty.name}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500">{faculty.email}</td>
+                            <td colSpan="3" className="px-4 py-3 text-sm text-gray-400 italic">No subjects assigned</td>
+                          </tr>
+                        )
+                      )}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           )}
+
         </div>
       )}
     </div>

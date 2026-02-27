@@ -98,18 +98,38 @@ export default function TimetableView() {
     setIsEditOpen(true);
   };
 
-  const handleUpdate = async () => {
-    if (!tableId) return alert("No timetable found!");
-    try {
-      await axios.put(`http://localhost:5000/api/timetable/update/period/${tableId}`, editData);
-      alert("Period updated successfully!");
-      setIsEditOpen(false);
-      fetchTimetable();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update period");
-    }
-  };
+// const handleUpdate = async () => {
+//   if (!tableId) return alert("No timetable found!");
+//   try {
+//     const res = await axios.put(
+//       `http://localhost:5000/api/timetable/update/period/${tableId}`,
+//       editData
+//     );
+//     // use updated timetable from response
+//     setTimetable(res.data?.timetable || []);
+//     alert("Period updated successfully!");
+//     setIsEditOpen(false);
+//   } catch (err) {
+//     console.error(err);
+//     alert("Failed to update period");
+//   }
+// };
+const handleUpdate = async () => {
+  if (!tableId) return alert("No timetable found!");
+  try {
+    const res = await axios.put(
+      `http://localhost:5000/api/timetable/update/period/${tableId}`,
+      editData   // { day, period, subjectId, facultyId }
+    );
+    setTimetable(res.data?.timetable || []);  // immediate refresh
+    alert("Period updated successfully!");
+    setIsEditOpen(false);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update period");
+  }
+};
+
 
   const deleteDay = async (day) => {
     if (!tableId) return;

@@ -37,7 +37,7 @@ export default function TimetableView() {
   // --- Auto-select HOD department ---
   useEffect(() => {
     if (isHOD && departments.length > 0) {
-      const userDeptId = user.departmentType?._id || user.departmentType;
+      const userDeptId = user.departmentId || user.departmentType?._id || user.departmentType || "";
       if (departments.some((d) => d._id === userDeptId)) setSelectedDept(userDeptId);
     }
   }, [departments, user, isHOD]);
@@ -146,16 +146,16 @@ export default function TimetableView() {
   };
 
   const getSubjectName = (subjectId) =>
-    subjectsList.find((s) => s._id === subjectId)?.subjectName || 
+    subjectsList.find((s) => s._id === subjectId)?.subjectName ||
     timetable.find((s) => s.subjectId === subjectId)?.subject || "—";
   const getFacultyName = (facultyId) =>
-    facultyList.find((f) => f._id === facultyId)?.name || 
+    facultyList.find((f) => f._id === facultyId)?.name ||
     timetable.find((f) => f.facultyId === facultyId)?.faculty || "—";
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-      <h2>Timetable Viewer</h2>
+        <h2>Timetable Viewer</h2>
         {isHOD && tableId && (
           <button
             onClick={deleteEntireTimetable}
@@ -235,38 +235,38 @@ export default function TimetableView() {
             </p>
           ) : (
             <div style={{ overflowX: "auto" }}>
-            <table
-              border="1"
-              cellPadding="10"
-              style={{ width: "100%", borderCollapse: "collapse", textAlign: "center" }}
-            >
+              <table
+                border="1"
+                cellPadding="10"
+                style={{ width: "100%", borderCollapse: "collapse", textAlign: "center" }}
+              >
                 <thead style={{ background: "#2563eb", color: "white" }}>
-                <tr>
-                  <th>Day</th>
-                  {PERIODS.map((p) => (
+                  <tr>
+                    <th>Day</th>
+                    {PERIODS.map((p) => (
                       <th key={p}>Period {p}</th>
-                  ))}
+                    ))}
                     {isHOD && <th>Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {DAYS.map((day) => {
-                  const dayRows = timetable.filter((t) => t.day === day);
-                  return (
-                    <tr key={day}>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAYS.map((day) => {
+                    const dayRows = timetable.filter((t) => t.day === day);
+                    return (
+                      <tr key={day}>
                         <td style={{ fontWeight: "bold", background: "#f3f4f6" }}>{day}</td>
-                      {PERIODS.map((period) => {
-                        const entry = dayRows.find((e) => Number(e.period) === period);
-                        return (
+                        {PERIODS.map((period) => {
+                          const entry = dayRows.find((e) => Number(e.period) === period);
+                          return (
                             <td key={period} style={{ height: "80px", verticalAlign: "top" }}>
-                            {entry ? (
-                              <>
+                              {entry ? (
+                                <>
                                   <div style={{ fontWeight: "bold", color: "#007BFF", marginBottom: "4px" }}>
                                     {getSubjectName(entry.subjectId)}
-                                </div>
-                                <div style={{ fontSize: "0.85em", color: "#555" }}>
+                                  </div>
+                                  <div style={{ fontSize: "0.85em", color: "#555" }}>
                                     {getFacultyName(entry.facultyId)}
-                                </div>
+                                  </div>
                                   {isHOD && (
                                     <button
                                       onClick={() => openEditModal(day, period, entry)}
@@ -284,10 +284,10 @@ export default function TimetableView() {
                                       Edit
                                     </button>
                                   )}
-                              </>
-                            ) : (
+                                </>
+                              ) : (
                                 <>
-                              <span style={{ color: "#ccc" }}>Free</span>
+                                  <span style={{ color: "#ccc" }}>Free</span>
                                   {isHOD && (
                                     <button
                                       onClick={() => openEditModal(day, period, null)}
@@ -307,10 +307,10 @@ export default function TimetableView() {
                                     </button>
                                   )}
                                 </>
-                            )}
-                          </td>
-                        );
-                      })}
+                              )}
+                            </td>
+                          );
+                        })}
                         {isHOD && (
                           <td style={{ verticalAlign: "middle" }}>
                             <button
@@ -329,11 +329,11 @@ export default function TimetableView() {
                             </button>
                           </td>
                         )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </>

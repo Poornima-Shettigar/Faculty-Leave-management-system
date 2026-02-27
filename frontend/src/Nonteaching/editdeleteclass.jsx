@@ -3,7 +3,7 @@ import axios from "axios";
 
 function ManageClasses() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
-  const departmentId = user.departmentType; // HOD's department ObjectId
+  const departmentId = user.departmentId || user.departmentType?._id || user.departmentType || ""; // HOD's department ObjectId
   const [department, setDepartment] = useState(null);
   const [classList, setClassList] = useState([]);
   const [editIndex, setEditIndex] = useState(null);

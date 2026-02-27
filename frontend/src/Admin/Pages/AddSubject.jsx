@@ -4,10 +4,10 @@ import axios from "axios";
 function AddSubject() {
   // Logged-in HOD details
   const user = JSON.parse(localStorage.getItem("user")) || {};
-  const hodDept = user.departmentType || "";
+  const initialDeptId = user.departmentId || user.departmentType?._id || user.departmentType || "";
 
   const [departments, setDepartments] = useState([]);
-  const [departmentId, setDepartmentId] = useState(hodDept);
+  const [departmentId, setDepartmentId] = useState(initialDeptId);
 
   const [faculties, setFaculties] = useState([]);
   const [facultyId, setFacultyId] = useState("");

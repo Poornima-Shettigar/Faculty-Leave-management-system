@@ -6,7 +6,8 @@ const PERIODS = [1, 2, 3, 4, 5, 6];
 
 export default function AddTimetable() {
   const user = JSON.parse(localStorage.getItem("user")) || {};
-  const [selectedDept] = useState(user.departmentType || "");
+  const initialDept = user.departmentId || user.departmentType?._id || user.departmentType || "";
+  const [selectedDept] = useState(initialDept);
 
   const [departments, setDepartments] = useState([]);
   const [availableClasses, setAvailableClasses] = useState([]);
@@ -18,6 +19,12 @@ export default function AddTimetable() {
 
   const [gridData, setGridData] = useState({});
   const [loading, setLoading] = useState(false);
+
+  const [validationError, setValidationError] = useState("");
+  const [cellErrors, setCellErrors] = useState({});
+
+  // ------------------ NEW ------------------
+  const [alreadyExists, setAlreadyExists] = useState(false);
 
   useEffect(() => {
     axios
@@ -34,9 +41,13 @@ export default function AddTimetable() {
   }, [selectedDept, departments]);
 
   useEffect(() => {
-    if (selectedDept && selectedClass && selectedSemester) fetchResources();
-    else {
+    if (selectedDept && selectedClass && selectedSemester) {
+      fetchResources();
+      checkTimetableExists();     // ✅ NEW
+    } else {
       setSubjectsList([]);
+      setFacultyList([]);
+      setAlreadyExists(false);
     }
   }, [selectedDept, selectedClass, selectedSemester]);
 
@@ -56,7 +67,38 @@ export default function AddTimetable() {
     }
   };
 
+  // ------------------------------------------------
+  // ✅ CHECK IF TIMETABLE ALREADY EXISTS
+  // ------------------------------------------------
+  const checkTimetableExists = async () => {
+    try {
+      const res = await axios.get(
+        "http://localhost:5000/api/timetable/check",
+        {
+          params: {
+            departmentType: selectedDept,
+            className: selectedClass,
+            semester: selectedSemester
+          }
+        }
+      );
+
+      if (res.data.exists) {
+        setAlreadyExists(true);
+        setGridData({});
+      } else {
+        setAlreadyExists(false);
+      }
+
+    } catch (error) {
+      console.error("Error checking timetable", error);
+      setAlreadyExists(false);
+    }
+  };
+
   const handleCellChange = (day, period, field, value) => {
+    if (alreadyExists) return;
+
     const key = `${day}-${period}`;
     setGridData((prev) => ({
       ...prev,
@@ -65,15 +107,71 @@ export default function AddTimetable() {
         [field]: value,
       },
     }));
+
+    setCellErrors((prev) => {
+      const copy = { ...prev };
+      delete copy[key];
+      return copy;
+    });
+  };
+
+  const validateTimetable = () => {
+    let hasAtLeastOne = false;
+    let errors = {};
+
+    DAYS.forEach((day) => {
+      PERIODS.forEach((period) => {
+        const key = `${day}-${period}`;
+        const cell = gridData[key];
+
+        if (cell && cell.subject) {
+          hasAtLeastOne = true;
+
+          if (!cell.faculty) {
+            errors[key] = true;
+          }
+        }
+      });
+    });
+
+    if (!hasAtLeastOne) {
+      setValidationError("Please select at least one subject in the timetable.");
+      setCellErrors({});
+      return false;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationError("Some subjects do not have assigned faculty.");
+      setCellErrors(errors);
+      return false;
+    }
+
+    setValidationError("");
+    setCellErrors({});
+    return true;
   };
 
   const handleSubmit = async () => {
-    if (!selectedClass || !selectedSemester) {
-      alert("Please select class and semester");
+
+    if (alreadyExists) {
+      setValidationError(
+        "Time table already created for this class and semester."
+      );
       return;
     }
 
+    setValidationError("");
+    setCellErrors({});
+
+    if (!selectedClass || !selectedSemester) {
+      setValidationError("Please select both Class and Semester.");
+      return;
+    }
+
+    if (!validateTimetable()) return;
+
     setLoading(true);
+
     const timetableArray = [];
 
     DAYS.forEach((day) => {
@@ -86,17 +184,11 @@ export default function AddTimetable() {
             day,
             period,
             subject: cell.subject,
-            faculty: cell.faculty || null,
+            faculty: cell.faculty,
           });
         }
       });
     });
-
-    if (timetableArray.length === 0) {
-      alert("Please fill at least one subject.");
-      setLoading(false);
-      return;
-    }
 
     const payload = {
       departmentType: selectedDept,
@@ -109,6 +201,7 @@ export default function AddTimetable() {
       await axios.post("http://localhost:5000/api/timetable/create", payload);
       alert("Timetable created successfully!");
       setGridData({});
+      setAlreadyExists(true);
     } catch (err) {
       console.error(err);
       alert("Error saving timetable");
@@ -120,6 +213,7 @@ export default function AddTimetable() {
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
       <div className="max-w-6xl mx-auto bg-white shadow-lg rounded-xl p-6 border border-gray-100">
+
         <h2 className="text-2xl font-bold text-blue-700 mb-4 text-center">
           Create Timetable
         </h2>
@@ -137,8 +231,10 @@ export default function AddTimetable() {
                 setSelectedClass(e.target.value);
                 setSelectedSemester("");
                 setGridData({});
+                setValidationError("");
+                setAlreadyExists(false);
               }}
-              className="border border-gray-300 p-2 rounded-lg w-60 shadow-sm focus:ring-2 focus:ring-blue-400"
+              className="border border-gray-300 p-2 rounded-lg w-60 shadow-sm"
             >
               <option value="">-- Select Class --</option>
               {availableClasses.map((c, i) => (
@@ -157,8 +253,10 @@ export default function AddTimetable() {
                 onChange={(e) => {
                   setSelectedSemester(e.target.value);
                   setGridData({});
+                  setValidationError("");
+                  setAlreadyExists(false);
                 }}
-                className="border border-gray-300 p-2 rounded-lg w-48 shadow-sm focus:ring-2 focus:ring-blue-400"
+                className="border border-gray-300 p-2 rounded-lg w-48 shadow-sm"
               >
                 <option value="">-- Select Semester --</option>
                 {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
@@ -171,6 +269,19 @@ export default function AddTimetable() {
           )}
         </div>
 
+        {/* -------- already exists message -------- */}
+        {alreadyExists && (
+          <div className="text-center text-red-600 font-semibold mb-4">
+            Time table already created for this class and semester.
+          </div>
+        )}
+
+        {validationError && (
+          <div className="text-center text-red-600 font-semibold mb-4">
+            {validationError}
+          </div>
+        )}
+
         {selectedClass && selectedSemester ? (
           <>
             <div className="overflow-x-auto mb-6">
@@ -179,9 +290,7 @@ export default function AddTimetable() {
                   <tr className="bg-blue-600 text-white text-sm">
                     <th className="p-2">Day</th>
                     {PERIODS.map((p) => (
-                      <th key={p} className="p-2">
-                        Period {p}
-                      </th>
+                      <th key={p} className="p-2">Period {p}</th>
                     ))}
                   </tr>
                 </thead>
@@ -193,9 +302,15 @@ export default function AddTimetable() {
 
                       {PERIODS.map((period) => {
                         const key = `${day}-${period}`;
+                        const hasError = cellErrors[key];
+
                         return (
-                          <td key={period} className="p-2 border">
+                          <td
+                            key={period}
+                            className={`p-2 border ${hasError ? "border-red-500 bg-red-50" : ""}`}
+                          >
                             <select
+                              disabled={alreadyExists}
                               className="w-full border border-gray-300 p-1 rounded mb-1 text-sm"
                               value={gridData[key]?.subject || ""}
                               onChange={(e) => {
@@ -216,7 +331,7 @@ export default function AddTimetable() {
                               <option value="">- Subject -</option>
                               {subjectsList.map((sub) => (
                                 <option key={sub._id} value={sub._id}>
-                                  {sub.subjectName} (Sem {sub.semester})
+                                  {sub.subjectName}
                                 </option>
                               ))}
                             </select>
@@ -228,7 +343,10 @@ export default function AddTimetable() {
                                   (s) => s._id === gridData[key]?.subject
                                 )?.faculty?.name || ""
                               }
-                              className="w-full bg-gray-100 text-gray-600 p-1 rounded text-sm"
+                              className={`w-full p-1 rounded text-sm ${hasError
+                                  ? "bg-red-100 text-red-600"
+                                  : "bg-gray-100 text-gray-600"
+                                }`}
                             />
                           </td>
                         );
@@ -242,17 +360,20 @@ export default function AddTimetable() {
             <div className="text-center">
               <button
                 onClick={handleSubmit}
-                disabled={loading}
-                className={`px-6 py-3 text-white rounded-lg shadow-md text-lg transition-all ${
-                  loading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
-                }`}
+                disabled={loading || alreadyExists}
+                className={`px-6 py-3 text-white rounded-lg shadow-md text-lg ${loading || alreadyExists
+                    ? "bg-gray-400"
+                    : "bg-green-600 hover:bg-green-700"
+                  }`}
               >
-                {loading ? "Saving..." : "Save Timetable"}
+                {alreadyExists ? "Timetable Already Exists" : loading ? "Saving..." : "Save Timetable"}
               </button>
             </div>
           </>
         ) : (
-          <p className="text-center text-gray-500 text-lg">Select Class and Semester to continue</p>
+          <p className="text-center text-gray-500 text-lg">
+            Select Class and Semester to continue
+          </p>
         )}
       </div>
     </div>

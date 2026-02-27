@@ -1,0 +1,485 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* 🎨 AMAZING COLOR PALETTE */
+:root {
+  /* Primary Gradients */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-success: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-warning: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  --gradient-danger: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  --gradient-info: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+
+  /* Amazing Color Variations */
+  --amazing-purple: #8b5cf6;
+  --amazing-blue: #3b82f6;
+  --amazing-pink: #ec4899;
+  --amazing-green: #22c55e;
+  --amazing-yellow: #f59e0b;
+  --amazing-red: #ef4444;
+  --amazing-orange: #f97316;
+  --amazing-teal: #14b8a6;
+  --amazing-cyan: #06b6d4;
+  --amazing-indigo: #6366f1;
+  --amazing-rose: #f43f5e;
+  --amazing-emerald: #10b981;
+  --amazing-violet: #8b5cf6;
+  --amazing-amber: #f59e0b;
+  --amazing-lime: #84cc16;
+}
+
+/* 🎯 BASE STYLES */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+/* 🎨 AMAZING BUTTONS */
+.amazing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.amazing-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.amazing-btn:hover::before {
+  left: 100%;
+}
+
+.amazing-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.amazing-btn-primary:hover {
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.amazing-btn-secondary {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4);
+}
+
+.amazing-btn-secondary:hover {
+  box-shadow: 0 8px 25px rgba(240, 147, 251, 0.6);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.amazing-btn-success {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+}
+
+.amazing-btn-success:hover {
+  box-shadow: 0 8px 25px rgba(79, 172, 254, 0.6);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.amazing-btn-warning {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(67, 233, 123, 0.4);
+}
+
+.amazing-btn-warning:hover {
+  box-shadow: 0 8px 25px rgba(67, 233, 123, 0.6);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.amazing-btn-danger {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(250, 112, 154, 0.4);
+}
+
+.amazing-btn-danger:hover {
+  box-shadow: 0 8px 25px rgba(250, 112, 154, 0.6);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.amazing-btn-outline {
+  background: transparent;
+  color: var(--amazing-purple);
+  border: 2px solid var(--amazing-purple);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+}
+
+.amazing-btn-outline:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px) scale(1.05);
+  border-color: transparent;
+}
+
+/* 🎨 AMAZING CARDS */
+.amazing-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.amazing-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.amazing-card-gradient {
+  border-radius: 16px;
+  padding: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.amazing-card-gradient::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+  pointer-events: none;
+}
+
+.amazing-card-gradient:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+}
+
+/* 🎨 AMAZING INPUTS */
+.amazing-input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  background: white;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.amazing-input:focus {
+  border-color: var(--amazing-purple);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+/* 🎨 AMAZING TABLES */
+.amazing-table {
+  width: 100%;
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.amazing-table th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 10px 16px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.amazing-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.amazing-table tr:hover td {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
+}
+
+/* 🎨 AMAZING BADGES */
+.amazing-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.amazing-badge-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.amazing-badge-success {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.amazing-badge-warning {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  color: white;
+}
+
+.amazing-badge-danger {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: white;
+}
+
+/* 🎨 AMAZING ALERTS */
+.amazing-alert {
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-weight: 500;
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.amazing-alert-success {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-color: var(--amazing-green);
+  color: #065f46;
+}
+
+.amazing-alert-warning {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: var(--amazing-yellow);
+  color: #92400e;
+}
+
+.amazing-alert-danger {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: var(--amazing-red);
+  color: #991b1b;
+}
+
+.amazing-alert-info {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: var(--amazing-blue);
+  color: #1e40af;
+}
+
+/* 🎨 AMAZING NAVIGATION */
+.amazing-nav-link {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateY(0);
+  text-decoration: none;
+  color: #4b5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amazing-nav-link:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
+  color: var(--amazing-purple);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+}
+
+.amazing-nav-link.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transform: translateX(4px);
+}
+
+/* 🎨 AMAZING LOADING SPINNER */
+.amazing-spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 4px solid rgba(139, 92, 246, 0.2);
+  border-top: 4px solid var(--amazing-purple);
+  border-radius: 50%;
+  animation: amazing-spin 1s linear infinite;
+}
+
+/* 🎨 AMAZING ANIMATIONS */
+@keyframes amazing-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes amazing-float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes amazing-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.8);
+  }
+}
+
+@keyframes amazing-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes amazing-slide {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 🎨 AMAZING UTILITIES */
+.amazing-gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+.amazing-glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+}
+
+.amazing-hover-float:hover {
+  animation: amazing-float 3s ease-in-out infinite;
+}
+
+.amazing-hover-glow:hover {
+  animation: amazing-glow 2s ease-in-out infinite;
+}
+
+/* 🎨 AMAZING RESPONSIVE */
+@media (max-width: 768px) {
+  .amazing-btn {
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+
+  .amazing-card {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .amazing-table th,
+  .amazing-table td {
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+}
+
+/* 🎨 AMAZING SCROLLBAR */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+/* 🎨 AMAZING SELECTION */
+::selection {
+  background: var(--amazing-purple);
+  color: white;
+}
+
+::-moz-selection {
+  background: var(--amazing-purple);
+  color: white;
+}
